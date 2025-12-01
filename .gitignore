@@ -1,0 +1,91 @@
+# Django + Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.sqlite3
+*.sqlite3-journal
+db.sqlite3
+db.sqlite3-journal
+
+# Виртуальное окружение
+venv/
+env/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Секреты и .env
+.env
+.env.local
+.env.*.local
+.env.production
+.env.backup
+.env
+.env.dev
+.env.prod
+.env.local
+*.env
+
+# Логи
+logs/
+*.log
+django.log
+
+# Загруженные файлы (фото студентов, документы и т.д.)
+media/
+!media/.gitkeep
+
+# Статические файлы (собранные collectstatic)
+staticfiles/
+static/
+!.gitkeep
+
+# Миграции — коммитим! (не игнорируем)
+# */migrations/*
+
+# Кэш и временные файлы
+*.cache
+*.bak
+*.tmp
+*.temp
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# IDE
+.vscode/
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# ОС
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Локальные настройки
+local_settings.py
+dev.py
+*.local
+
+# Экспорт (если сохраняешь Excel в проекте)
+exports/
+*.xlsx
+*.csv
+
+# Docker (если используешь)
+docker-compose.override.yml
+Dockerfile.local
