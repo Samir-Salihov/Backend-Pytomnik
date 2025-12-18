@@ -1,13 +1,55 @@
 # core/urls.py
 from django.contrib import admin
-from django.urls import path
-from apps.users.views import CustomLoginView, RegisterView, MeView
+from django.urls import path, include
+from apps.users.views import (
+    CustomLoginView,
+    RegisterView,
+    MeView,
+    UserListView,
+    UserDetailView,
+    ActivateUserView,
+    UsersByRoleView,
+    ChangePasswordView
+)
 from rest_framework_simplejwt.views import TokenRefreshView
+from apps.students.views import (
+    StudentListView, StudentDetailView, StudentCreateView,
+    StudentUpdateView, StudentDeleteView, StudentChangeLevelView,
+    StudentLevelHistoryView, StudentCommentsView, CommentUpdateView, 
+)
+from apps.kanban.views import KanbanBoardDetailView, MoveCardView
+
+from apps.export.views import ExportStudentsExcelView
+
+
 
 urlpatterns = [
-    
-    path("login/", CustomLoginView.as_view(), name="login"),
-    path("register/", RegisterView.as_view(), name="register"),
+    #ручки для польователя
     path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
-    path("me/", MeView.as_view(), name="me"),
+    path('login/', CustomLoginView.as_view(), name='login'),
+    path('register/', RegisterView.as_view(), name='register'),
+    path('me/', MeView.as_view(), name='me'),
+    path('me/change-password/', ChangePasswordView.as_view(), name='change-password'),
+    #ручки для работы с пользователем
+    path('users/', UserListView.as_view(), name='user-list'),
+    path('users/<int:pk>/', UserDetailView.as_view(), name='user-detail'),
+    path('users/<int:pk>/activate/', ActivateUserView.as_view(), name='activate-user'),
+    path('users/by-role/<str:role>/', UsersByRoleView.as_view(), name='users-by-role'),
+    #ручки для работы со студентами
+    path('students/', StudentListView.as_view(), name='student-list'),
+    path('students/create/', StudentCreateView.as_view(), name='student-create'),
+    path('students/<int:pk>/', StudentDetailView.as_view(), name='student-detail'),
+    path('students/<int:pk>/update/', StudentUpdateView.as_view(), name='student-update'),
+    path('students/<int:pk>/delete/', StudentDeleteView.as_view(), name='student-delete'),
+    path('students/<int:pk>/change-level/', StudentChangeLevelView.as_view(), name='change-level'),
+    path('students/<int:pk>/level-history/', StudentLevelHistoryView.as_view(), name='level-history'),
+    path('students/<int:pk>/comments/', StudentCommentsView.as_view(), name='student-comments'),
+    path('students/<int:student_pk>/comments/<int:comment_pk>/', CommentUpdateView.as_view(), name='comment-update'),
+    path('users/', UserListView.as_view(), name='user-list'),
+    path('kanban/<str:board_id>/', KanbanBoardDetailView.as_view(), name='board-detail'),
+    path('move/', MoveCardView.as_view(), name='move-card'),
+
+    path('export/', ExportStudentsExcelView.as_view(), name='export')
+    
 ]
+
