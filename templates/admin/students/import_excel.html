@@ -1,0 +1,215 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block extrastyle %}
+<style>
+    .import-container {
+        max-width: 800px;
+        margin: 40px auto;
+        padding: 50px;
+        background: white;
+        border-radius: 28px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+    }
+    .import-title {
+        text-align: center;
+        font-size: 40px;
+        font-weight: bold;
+        color: #1e293b;
+        margin-bottom: 40px;
+    }
+    .file-upload-area {
+        position: relative;
+        border: 4px dashed #94a3b8;
+        border-radius: 20px;
+        padding: 60px 40px;
+        text-align: center;
+        background: #f8fafc;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+    .file-upload-area:hover {
+        border-color: #6366f1;
+        background: #eef2ff;
+    }
+    .file-upload-area.has-file {
+        border-color: #10b981;
+        background: #f0fdf4;
+    }
+    .upload-icon {
+        font-size: 60px;
+        color: #94a3b8;
+        margin-bottom: 20px;
+    }
+    .upload-text {
+        font-size: 24px;
+        font-weight: bold;
+        color: #475569;
+        margin-bottom: 10px;
+    }
+    .upload-hint {
+        font-size: 18px;
+        color: #64748b;
+    }
+    .file-info {
+        margin-top: 25px;
+        font-size: 20px;
+        color: #10b981;
+        font-weight: bold;
+        display: none;
+    }
+    .buttons {
+        text-align: center;
+        margin-top: 50px;
+    }
+    .btn-import {
+        background: linear-gradient(to right, #10b981, #059669);
+        color: white;
+        padding: 18px 50px;
+        border: none;
+        border-radius: 16px;
+        font-size: 22px;
+        font-weight: bold;
+        cursor: pointer;
+        box-shadow: 0 10px 30px rgba(16,185,129,0.3);
+        transition: all 0.3s ease;
+    }
+    .btn-import:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 20px 40px rgba(16,185,129,0.4);
+    }
+    .btn-cancel {
+        margin-left: 30px;
+        color: #64748b;
+        font-size: 20px;
+        text-decoration: none;
+        padding: 18px 40px;
+        border-radius: 16px;
+        background: #e2e8f0;
+        transition: background 0.3s ease;
+    }
+    .btn-cancel:hover {
+        background: #cbd5e1;
+    }
+    .info-box {
+        margin-top: 50px;
+        padding: 30px;
+        background: linear-gradient(to right, #eef2ff, #e0e7ff);
+        border-radius: 20px;
+        border-left: 8px solid #6366f1;
+    }
+    .info-title {
+        font-size: 24px;
+        font-weight: bold;
+        color: #4338ca;
+        margin-bottom: 20px;
+    }
+    .info-list {
+        font-size: 18px;
+        line-height: 2;
+        color: #374151;
+    }
+    .required {
+        color: #dc2626;
+        font-weight: bold;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="import-container">
+    <h1 class="import-title">Импорт студентов из Excel</h1>
+    
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        
+        <div class="file-upload-area" id="fileUploadArea">
+            <div class="upload-icon">📁</div>
+            <div class="upload-text" id="uploadText">Нажмите, чтобы выбрать файл Excel (.xlsx)</div>
+            <div class="upload-hint">или перетащите файл сюда</div>
+            {{ form.excel_file }}
+            <div class="file-info" id="fileInfo"></div>
+        </div>
+        
+        <div class="buttons">
+            <button type="submit" class="btn-import">
+                Импортировать студентов
+            </button>
+            <a href="{% url 'admin:students_student_changelist' %}" class="btn-cancel">
+                Отмена
+            </a>
+        </div>
+    </form>
+
+    <div class="info-box">
+        <div class="info-title">Требования к файлу</div>
+        <ul class="info-list">
+            <li>Формат файла: <strong>.xlsx</strong></li>
+            <li>Первая строка — заголовки колонок</li>
+            <li class="required">Обязательные колонки: Фамилия, Имя, Возраст, Личный телефон</li>
+            <li>Возраст от 14 до 30 лет</li>
+            <li>Личный телефон должен быть уникальным</li>
+        </ul>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const fileInput = document.querySelector('input[name="excel_file"]');
+        const uploadArea = document.getElementById('fileUploadArea');
+        const uploadText = document.getElementById('uploadText');
+        const fileInfo = document.getElementById('fileInfo');
+
+        // Клик по всей области
+        uploadArea.addEventListener('click', function() {
+            fileInput.click();
+        });
+
+        // Изменение файла
+        fileInput.addEventListener('change', function() {
+            if (this.files && this.files.length > 0) {
+                const file = this.files[0];
+                const fileName = file.name;
+                const fileSize = (file.size / 1024).toFixed(1);
+
+                uploadText.textContent = "Файл выбран:";
+                fileInfo.innerHTML = `<strong>${fileName}</strong> (${fileSize} КБ)`;
+                fileInfo.style.display = 'block';
+                uploadArea.classList.add('has-file');
+            } else {
+                uploadText.textContent = "Нажмите, чтобы выбрать файл Excel (.xlsx)";
+                fileInfo.style.display = 'none';
+                fileInfo.innerHTML = '';
+                uploadArea.classList.remove('has-file');
+            }
+        });
+
+        // Drag & Drop (бонус)
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, preventDefaults, false);
+        });
+ 
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, () => uploadArea.classList.add('has-file'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            uploadArea.addEventListener(eventName, () => uploadArea.classList.remove('has-file'), false);
+        });
+
+        uploadArea.addEventListener('drop', function(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                fileInput.dispatchEvent(new Event('change'));
+            }
+        });
+    });
+</script>
+{% endblock %}

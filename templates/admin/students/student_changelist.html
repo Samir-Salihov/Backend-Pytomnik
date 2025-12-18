@@ -1,0 +1,96 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block extrastyle %}
+<style>
+    .action-cards {
+        display: flex;
+        gap: 40px;
+        justify-content: center;
+        margin: 40px 0;
+        flex-wrap: wrap;
+    }
+    .action-card {
+        flex: 1;
+        min-width: 400px;
+        padding: 40px;
+        border-radius: 24px;
+        text-align: center;
+        color: white;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .action-card:hover {
+        transform: translateY(-10px);
+        box-shadow: 0 30px 60px rgba(0,0,0,0.3);
+    }
+    .import-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    .export-card {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    }
+    .action-title {
+        font-size: 32px;
+        font-weight: bold;
+        margin-bottom: 20px;
+    }
+    .action-desc {
+        font-size: 18px;
+        margin-bottom: 30px;
+        opacity: 0.9;
+    }
+    .action-btn {
+        display: inline-block;
+        background: white;
+        padding: 18px 40px;
+        border-radius: 16px;
+        font-size: 20px;
+        font-weight: bold;
+        text-decoration: none;
+        box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        transition: all 0.3s ease;
+    }
+    .import-btn { color: #667eea; }
+    .export-btn { color: #10b981; }
+    .action-btn:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 15px 30px rgba(0,0,0,0.3);
+    }
+    .action-note {
+        margin-top: 25px;
+        font-size: 16px;
+        opacity: 0.8;
+    }
+</style>
+{% endblock %}
+
+{% block object-tools %}
+<div class="action-cards">
+    <!-- Импорт -->
+    <div class="action-card import-card">
+        <div class="action-title">Импорт из Excel</div>
+        <div class="action-desc">Добавьте студентов из файла</div>
+        <a href="{% url 'admin:students_import_excel' %}" class="action-btn import-btn">
+            Загрузить файл .xlsx
+        </a>
+        <div class="action-note">
+            Обязательные: Фамилия, Имя, Возраст, Телефон
+        </div>
+    </div>
+
+    <!-- Экспорт -->
+    <div class="action-card export-card">
+        <div class="action-title">Экспорт в Excel</div>
+        <div class="action-desc">Скачайте всех студентов</div>
+        <a href="{% url 'admin:students_export_excel' %}" class="action-btn export-btn">
+            Скачать файл .xlsx
+        </a>
+        <div class="action-note">
+            Все студенты со всеми полями
+        </div>
+    </div>
+</div>
+<br />
+{{ block.super }}
+{% endblock %}

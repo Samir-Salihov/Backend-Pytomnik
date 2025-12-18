@@ -5,7 +5,7 @@ from pathlib import Path
 import os
 from dotenv import load_dotenv
 from django.core.management.utils import get_random_secret_key
-from datetime import timedelta
+from datetime import timedelta, time
 
 load_dotenv()
 
@@ -35,7 +35,10 @@ INSTALLED_APPS = [
     'apps.students',
     'apps.analytics',
     'apps.users',
-    'corsheaders'
+    'corsheaders',
+    'apps.kanban',
+    'apps.export',
+    'apps.alabuga_mulatki'
 ]
 
 MIDDLEWARE = [
@@ -97,7 +100,7 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
-# Static & Media
+
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'static']
@@ -105,18 +108,23 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Channels (WebSocket)
+
+CELERY_BROKER_URL = 'redis://localhost:6379/0'
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'UTC'
+
+
 CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {"hosts": [("redis", 6379)]},
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [('localhost', 6379)],
+        },
     },
 }
-
-# Celery
-CELERY_BROKER_URL = 'redis://redis:6379/0'
-CELERY_RESULT_BACKEND = 'redis://redis:6379/0'
-CELERY_ACCEPT_CONTENT = ['json']
 
 
 REST_FRAMEWORK = {
@@ -127,7 +135,7 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ],
     'EXCEPTION_HANDLER': 'apps.users.exceptions.custom_exception_handler',
-}
+} 
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
@@ -154,8 +162,7 @@ SIMPLE_JWT = {
     "AUTH_TOKEN_CLASSES": ("rest_framework_simplejwt.tokens.AccessToken",),
     "TOKEN_TYPE_CLAIM": "token_type",
 }
-
-
+ 
 AUTH_USER_MODEL = "users.User"
 
 
@@ -188,11 +195,56 @@ LOGGING = {
 }
 
 
-ALLOWED_HOSTS = [
-    'localhost',
-    '127.0.0.1',
-    '10.16.252.89', 
-]
+ALLOWED_HOSTS = ["*"]
 
 
 CORS_ALLOW_ALL_ORIGINS = True
+
+
+
+
+
+
+# Настройки для экспорта
+EXPORT_SETTINGS = {
+    'MAX_SYNC_EXPORT': 5000,           # Максимум записей для синхронного экспорта
+    'EXPORT_FILE_TTL_DAYS': 7,         # Хранить файлы 7 дней
+    'LOG_RETENTION_DAYS': 30,          # Хранить логи 30 дней
+    'STORAGE_PATH': os.path.join(MEDIA_ROOT, 'exports'),
+    'DEFAULT_PAGE_SIZE': 20,           # Размер страницы по умолчанию
+}
+
+
+# Периодические задачи Celery (Beat)
+CELERY_BEAT_SCHEDULE = {
+    'cleanup-old-exports-daily': {
+        'task': 'export_excel.tasks.cleanup_old_exports',
+        'schedule': 86400.0,  # Каждые 24 часа
+        'options': {
+            'expires': 3600,
+        }
+    },
+    'generate-export-summary-daily': {
+        'task': 'export_excel.tasks.generate_export_summary',
+        'schedule': 86400.0,  
+        'options': {
+            'eta': time(23, 59, 0),
+            'expires': 3600,
+        }
+    },
+    'cleanup-old-logs-weekly': {
+        'task': 'export_excel.tasks.cleanup_old_logs_task',
+        'schedule': 7 * 86400.0,  
+        'args': (30,),
+        'options': {
+            'expires': 3600,
+        }
+    },
+    'export-statistics-report-weekly': {
+        'task': 'export_excel.tasks.export_statistics_report',
+        'schedule': 7 * 86400.0,  
+        'options': {
+            'expires': 3600,
+        }
+    },
+}
