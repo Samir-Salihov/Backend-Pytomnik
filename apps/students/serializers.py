@@ -5,24 +5,12 @@ from django.contrib.auth import get_user_model
 
 User = get_user_model()
 
-
-# ===================================================================
-# 1. Основной сериалайзер — для просмотра (список + детально)
-# ===================================================================
-# apps/students/serializers.py
-from rest_framework import serializers
-from .models import Student, LevelHistory, Comment
-from django.contrib.auth import get_user_model
-
-User = get_user_model()
-
 class StudentSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField(read_only=True)
     level_display = serializers.CharField(source='get_level_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     category_display = serializers.CharField(source='get_category_display', read_only=True)
 
-    # БЕЗОПАСНЫЙ вывод имени пользователя (если None — "—")
     created_by_username = serializers.SerializerMethodField()
     updated_by_username = serializers.SerializerMethodField()
 
@@ -48,19 +36,15 @@ class StudentSerializer(serializers.ModelSerializer):
     def get_full_name(self, obj):
         return obj.full_name
 
-    # ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←
-    # БЕЗОПАСНЫЙ ВЫВОД "КЕМ СОЗДАН"
     def get_created_by_username(self, obj):
         if obj.created_by:
             return obj.created_by.get_full_name() or obj.created_by.username
         return "—"
 
-    # БЕЗОПАСНЫЙ ВЫВОД "КЕМ ИЗМЕНЁН"
     def get_updated_by_username(self, obj):
         if obj.updated_by:
             return obj.updated_by.get_full_name() or obj.updated_by.username
         return "—"
-    # ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←
 
     def get_level_history(self, obj):
         history = obj.level_history.all().order_by('-changed_at')[:20]
@@ -70,15 +54,7 @@ class StudentSerializer(serializers.ModelSerializer):
         comments = obj.comments.all().order_by('-created_at')
         return CommentListSerializer(comments, many=True).data
 
-# Остальные сериализаторы — оставь как есть (они уже правильные)
-# StudentCreateSerializer, StudentUpdateSerializer и т.д.
-
-
-# ===================================================================
-# 2. Кастомный для СОЗДАНИЯ студента
-# ===================================================================
 class StudentCreateSerializer(serializers.ModelSerializer):
-    """Специально для создания — только нужные поля + строгая валидация"""
     class Meta:
         model = Student
         fields = [
@@ -111,12 +87,7 @@ class StudentCreateSerializer(serializers.ModelSerializer):
         )
         return student
 
-
-# ===================================================================
-# 3. Кастомный для РЕДАКТИРОВАНИЯ студента
-# ===================================================================
 class StudentUpdateSerializer(serializers.ModelSerializer):
-    """Специально для обновления — все поля редактируемы, кроме метаданных"""
     class Meta:
         model = Student
         fields = [
@@ -140,10 +111,6 @@ class StudentUpdateSerializer(serializers.ModelSerializer):
         instance.save()
         return instance
 
-
-# ===================================================================
-# 4. История уровней
-# ===================================================================
 class LevelHistorySerializer(serializers.ModelSerializer):
     changed_by_username = serializers.CharField(source='changed_by.username', read_only=True)
     old_level_display = serializers.CharField(source='get_old_level_display', read_only=True)
@@ -157,12 +124,7 @@ class LevelHistorySerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ('id', 'changed_by', 'changed_at')
 
-
-# ===================================================================
-# 5. Комментарии — два варианта
-# ===================================================================
 class CommentListSerializer(serializers.ModelSerializer):
-    """Для отображения в списке (короткий, красивый)"""
     author_username = serializers.CharField(source='author.username', read_only=True)
     is_edited_label = serializers.SerializerMethodField()
 
@@ -174,9 +136,7 @@ class CommentListSerializer(serializers.ModelSerializer):
     def get_is_edited_label(self, obj):
         return "ред." if obj.is_edited else ""
 
-
 class CommentCreateSerializer(serializers.ModelSerializer):
-    """Специально для создания комментария"""
     class Meta:
         model = Comment
         fields = ['text']
@@ -190,16 +150,14 @@ class CommentCreateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         request = self.context.get('request')
-        student = self.context.get('student')  # передаётся из view
+        student = self.context.get('student')
         return Comment.objects.create(
             student=student,
             author=request.user,
             text=validated_data['text']
         )
 
-
 class CommentUpdateSerializer(serializers.ModelSerializer):
-    """Специально для редактирования комментария (только текст)"""
     class Meta:
         model = Comment
         fields = ['text']

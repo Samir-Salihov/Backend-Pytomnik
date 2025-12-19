@@ -1,11 +1,10 @@
 # apps/kanban/models.py
 from django.db import models
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError  # ←←←←← ВОТ ЭТО ОБЯЗАТЕЛЬНО!
-from apps.students.models import Student
+from django.core.exceptions import ValidationError
+from apps.students.models import Student  # Импорт после определения Student
 
 User = get_user_model()
-
 
 class KanbanBoard(models.Model):
     id = models.CharField("ID доски", max_length=50, primary_key=True)
@@ -22,13 +21,12 @@ class KanbanBoard(models.Model):
     def __str__(self):
         return self.title
 
-
 class KanbanColumn(models.Model):
     COLUMN_TYPES = [
-        ('black', 'Чёрный пояс'),
-        ('red', 'Красный пояс'),
-        ('yellow', 'Жёлтый пояс'),
-        ('green', 'Зелёный пояс'),
+        ('black', 'Чёрный уровень'),
+        ('red', 'Красный уровень'),
+        ('yellow', 'Жёлтый уровень'),
+        ('green', 'Зелёный уровень'),
         ('hr_call', 'Вызов к HR'),
         ('fired', 'Уволен'),
     ]
@@ -47,7 +45,6 @@ class KanbanColumn(models.Model):
 
     def __str__(self):
         return f"{self.board.title} → {self.get_id_display()}"
-
 
 class StudentKanbanCard(models.Model):
     student = models.OneToOneField(
@@ -78,7 +75,6 @@ class StudentKanbanCard(models.Model):
         return f"{self.student.full_name} → {self.column.get_id_display()}"
 
     def clean(self):
-        # Защита: студент не может быть на двух досках одновременно
         if StudentKanbanCard.objects.exclude(pk=self.pk).filter(
             student=self.student,
             column__board=self.column.board

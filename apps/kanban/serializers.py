@@ -3,7 +3,6 @@ from rest_framework import serializers
 from apps.students.models import Student
 from .models import KanbanBoard, KanbanColumn, StudentKanbanCard
 
-
 class StudentCardSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(source='student.id')
     full_name = serializers.CharField(source='student.full_name')
@@ -26,14 +25,12 @@ class StudentCardSerializer(serializers.ModelSerializer):
             tags.append({"text": "Вызов к HR", "color": "#F59E0B"})
         return tags
 
-
 class KanbanColumnSerializer(serializers.ModelSerializer):
     cards = StudentCardSerializer(many=True, read_only=True)
 
     class Meta:
         model = KanbanColumn
         fields = ['id', 'title', 'color', 'cards']
-
 
 class KanbanBoardSerializer(serializers.ModelSerializer):
     columns = KanbanColumnSerializer(many=True, read_only=True)
