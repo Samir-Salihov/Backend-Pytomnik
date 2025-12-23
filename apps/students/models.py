@@ -24,7 +24,7 @@ CATEGORY_CHOICES = [
     ('college', 'Колледжисты'),
     ('patriot', 'Патриоты'),
     ('alabuga_start', 'Алабуга Старт (колледжисты)'),
-    ('alabuga_mulatki', 'Алабуга Старт (мулатки)'),
+    ('alabuga_mulatki', 'Алабуга Старт (МИР)'),
 ]
 
 class StudentQuerySet(models.QuerySet):

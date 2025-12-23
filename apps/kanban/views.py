@@ -35,19 +35,9 @@ class MoveCardView(APIView):
         card = get_object_or_404(StudentKanbanCard, id=card_id)
         new_column = get_object_or_404(KanbanColumn, id=column_id)
 
-        old_level = card.student.level
-
         card.student.level = new_column.id
         card.student.updated_by = request.user
-        card.student.save()
-
-        LevelHistory.objects.create(
-            student=card.student,
-            old_level=old_level,
-            new_level=new_column.id,
-            changed_by=request.user,
-            comment=request.data.get("comment", "")
-        )
+        card.student.save() 
 
         card.column = new_column
         card.position = position
