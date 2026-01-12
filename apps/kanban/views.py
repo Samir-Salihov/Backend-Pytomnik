@@ -3,13 +3,11 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
-
-from .models import KanbanBoard
+from django.db import transaction
+from rest_framework import status
+from .models import KanbanBoard, StudentKanbanCard, KanbanColumn
 from .serializers import KanbanBoardSerializer
-from .services import move_student_card
-from .permissions import IsHRorAdmin, CanMoveCard
-from .exceptions import KanbanAPIException
-
+from apps.students.models import Student, LevelHistory
 
 class KanbanBoardDetailView(APIView):
     permission_classes = [IsAuthenticated]
@@ -22,21 +20,37 @@ class KanbanBoardDetailView(APIView):
         serializer = KanbanBoardSerializer(board)
         return Response(serializer.data)
 
-
 class MoveCardView(APIView):
-    permission_classes = [IsAuthenticated, CanMoveCard]
+    permission_classes = [IsAuthenticated]
 
+    @transaction.atomic
     def post(self, request):
-        card_id = request.data.get("cardId")  # ID студента
+        card_id = request.data.get("cardId")
         column_id = request.data.get("columnId")
         position = request.data.get("position", 0)
 
         if not card_id or not column_id:
-            raise KanbanAPIException(detail="cardId и columnId обязательны")
+            return Response({"success": False, "message": "cardId и columnId обязательны"}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            move_student_card(card_id=int(card_id), target_column_id=column_id, new_position=position)
-        except Exception as e:
-            raise KanbanAPIException(detail=str(e))
+        card = get_object_or_404(StudentKanbanCard, id=card_id)
+        new_column = get_object_or_404(KanbanColumn, id=column_id)
+
+        old_level = card.student.level
+
+        card.student.level = new_column.id
+        card.student.updated_by = request.user
+        card.student.save()
+
+        LevelHistory.objects.create(
+            student=card.student,
+            old_level=old_level,
+            new_level=new_column.id,
+            changed_by=request.user,
+            comment=request.data.get("comment", "")
+        )
+
+        card.column = new_column
+        card.position = position
+        card.save()
 
         return Response({"success": True, "message": "Карточка перемещена"})

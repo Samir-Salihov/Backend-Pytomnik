@@ -38,7 +38,6 @@ INSTALLED_APPS = [
     'corsheaders',
     'apps.kanban',
     'apps.export',
-    'apps.alabuga_mulatki'
 ]
 
 MIDDLEWARE = [

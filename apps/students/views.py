@@ -5,20 +5,18 @@ from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 
-from .models import Student, LevelHistory, Comment
+from .models import Student, LevelHistory, Comment, LEVEL_CHOICES  
 from .serializers import (
-    StudentSerializer,                    # Полный просмотр (детально)
-    StudentCreateSerializer,              # Только создание
-    StudentUpdateSerializer,              # Только редактирование
+    StudentSerializer,
+    StudentCreateSerializer,
+    StudentUpdateSerializer,
     LevelHistorySerializer,
-    CommentListSerializer,               # Для вывода списка комментариев
-    CommentCreateSerializer,              # Для создания комментария
-    CommentUpdateSerializer,              # Для редактирования комментария
+    CommentListSerializer,
+    CommentCreateSerializer,
+    CommentUpdateSerializer
 )
-from .permissions import IsHRForLevelChange
 
 
-# GET /api/students/ — список всех студентов
 class StudentListView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -32,7 +30,6 @@ class StudentListView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-# GET /api/students/<pk>/ — детальный просмотр
 class StudentDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -45,7 +42,6 @@ class StudentDetailView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-# POST /api/students/ — создание студента
 class StudentCreateView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
@@ -72,7 +68,6 @@ class StudentCreateView(APIView):
         }, status=status.HTTP_400_BAD_REQUEST)
 
 
-# PUT /api/students/<pk>/ — редактирование студента
 class StudentUpdateView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
@@ -100,7 +95,6 @@ class StudentUpdateView(APIView):
         }, status=status.HTTP_400_BAD_REQUEST)
 
 
-# DELETE /api/students/<pk>/ — удаление студента
 class StudentDeleteView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
@@ -114,16 +108,15 @@ class StudentDeleteView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-# POST /api/students/<pk>/change-level/ — смена уровня (HR only)
 class StudentChangeLevelView(APIView):
-    permission_classes = [IsAuthenticated, IsHRForLevelChange]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, pk):
         student = get_object_or_404(Student, pk=pk)
         new_level = request.data.get('new_level')
         comment = request.data.get('comment', '').strip()
 
-        if new_level not in dict(Student.LEVEL_CHOICES):
+        if new_level not in dict(LEVEL_CHOICES): 
             return Response({
                 "success": False,
                 "message": "Недопустимый уровень"
@@ -134,7 +127,6 @@ class StudentChangeLevelView(APIView):
         student.updated_by = request.user
         student.save()
 
-        # Создаём запись в истории (сигнал тоже сработает, но дублируем для надёжности)
         LevelHistory.objects.create(
             student=student,
             old_level=old_level,
@@ -155,7 +147,6 @@ class StudentChangeLevelView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-# GET /api/students/<pk>/level-history/ — история уровней
 class StudentLevelHistoryView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -171,11 +162,9 @@ class StudentLevelHistoryView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-# Комментарии: GET (список), POST (создать), PATCH (редактировать)
 class StudentCommentsView(APIView):
     permission_classes = [IsAuthenticated]
 
-    # Список комментариев
     def get(self, request, pk):
         student = get_object_or_404(Student, pk=pk)
         comments = student.comments.all().order_by('-created_at')
@@ -186,7 +175,6 @@ class StudentCommentsView(APIView):
             "comments": serializer.data
         }, status=status.HTTP_200_OK)
 
-    # Создание комментария
     def post(self, request, pk):
         student = get_object_or_404(Student, pk=pk)
         serializer = CommentCreateSerializer(
@@ -208,14 +196,12 @@ class StudentCommentsView(APIView):
         }, status=status.HTTP_400_BAD_REQUEST)
 
 
-# PATCH /api/students/<student_pk>/comments/<comment_pk>/ — редактирование комментария
 class CommentUpdateView(APIView):
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, student_pk, comment_pk):
         comment = get_object_or_404(Comment, pk=comment_pk, student_id=student_pk)
 
-        # Только автор или админ может редактировать
         if comment.author != request.user and not request.user.is_staff:
             return Response({
                 "success": False,

@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 
 User = get_user_model()
 
-# === Выборы (лучше выносить в константы) ===
+# Choices moved to class attributes for Student
 LEVEL_CHOICES = [
     ('black', 'Чёрный'),
     ('red', 'Красный'),
@@ -27,7 +27,6 @@ CATEGORY_CHOICES = [
     ('alabuga_mulatki', 'Алабуга Старт (мулатки)'),
 ]
 
-
 class StudentQuerySet(models.QuerySet):
     """Оптимизированные запросы"""
     def active(self):
@@ -42,7 +41,6 @@ class StudentQuerySet(models.QuerySet):
                       models.Coalesce(' ' + models.F('patronymic'), '')
         )
 
-
 class StudentManager(models.Manager):
     def get_queryset(self):
         return StudentQuerySet(self.model, using=self._db)
@@ -52,7 +50,6 @@ class StudentManager(models.Manager):
 
     def by_level(self, level):
         return self.get_queryset().by_level(level)
-
 
 class Student(models.Model):
     # Основные данные
@@ -83,7 +80,6 @@ class Student(models.Model):
     # Медицина
     medical_info = models.TextField("Медицинские данные", blank=True, null=True)
 
-
     last_changed_field = models.CharField(
         "Последнее изменённое поле",
         max_length=200,
@@ -102,7 +98,6 @@ class Student(models.Model):
         User, on_delete=models.SET_NULL, null=True, related_name="updated_students"
     )
 
-    # Оптимизация
     objects = StudentManager()
 
     class Meta:
@@ -133,14 +128,9 @@ class Student(models.Model):
             raise ValidationError("Возраст должен быть от 14 до 30 лет")
 
     def save(self, *args, **kwargs):
-        # Автозаполнение updated_by при редактировании
         if self.pk and kwargs.get('request'):
             self.updated_by = kwargs.pop('request').user
         super().save(*args, **kwargs)
-
-
-
-# в models.py (добавь в конец)
 
 class LevelHistory(models.Model):
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="level_history")
@@ -155,7 +145,6 @@ class LevelHistory(models.Model):
 
     def __str__(self):
         return f"{self.student} — {self.get_old_level_display()} → {self.get_new_level_display()}"
-
 
 class Comment(models.Model):
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="comments")
