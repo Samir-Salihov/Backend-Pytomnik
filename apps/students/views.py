@@ -67,13 +67,23 @@ class StudentCreateView(APIView):
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
 
-
 class StudentUpdateView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def put(self, request, pk):
+        return self._update_student(request, pk, partial=False)
+
+    def patch(self, request, pk):
+        return self._update_student(request, pk, partial=True)
+
+    def _update_student(self, request, pk, partial=False):
         student = get_object_or_404(Student, pk=pk)
-        serializer = StudentUpdateSerializer(student, data=request.data, context={'request': request})
+        serializer = StudentUpdateSerializer(
+            student, 
+            data=request.data, 
+            context={'request': request},
+            partial=partial  
+        )
         if serializer.is_valid():
             updated_student = serializer.save()
             return Response({
@@ -143,7 +153,7 @@ class StudentChangeLevelView(APIView):
             "old_level": old_level,
             "new_level": new_level,
             "changed_by": request.user.username,
-            "comment": comment
+            "comment": comment 
         }, status=status.HTTP_200_OK)
 
 
