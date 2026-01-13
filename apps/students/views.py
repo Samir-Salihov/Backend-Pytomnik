@@ -126,7 +126,7 @@ class StudentChangeLevelView(APIView):
         new_level = request.data.get('new_level')
         comment = request.data.get('comment', '').strip()
 
-        if new_level not in dict(LEVEL_CHOICES): 
+        if new_level not in dict(LEVEL_CHOICES):
             return Response({
                 "success": False,
                 "message": "Недопустимый уровень"
@@ -135,15 +135,8 @@ class StudentChangeLevelView(APIView):
         old_level = student.level
         student.level = new_level
         student.updated_by = request.user
-        student.save()
-
-        LevelHistory.objects.create(
-            student=student,
-            old_level=old_level,
-            new_level=new_level,
-            changed_by=request.user,
-            comment=comment
-        )
+        student._change_comment = comment  
+        student.save()  
 
         return Response({
             "success": True,
@@ -153,9 +146,8 @@ class StudentChangeLevelView(APIView):
             "old_level": old_level,
             "new_level": new_level,
             "changed_by": request.user.username,
-            "comment": comment 
+            "comment": comment
         }, status=status.HTTP_200_OK)
-
 
 class StudentLevelHistoryView(APIView):
     permission_classes = [IsAuthenticated]

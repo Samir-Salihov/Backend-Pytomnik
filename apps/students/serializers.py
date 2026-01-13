@@ -112,17 +112,55 @@ class StudentUpdateSerializer(serializers.ModelSerializer):
         return instance
 
 class LevelHistorySerializer(serializers.ModelSerializer):
-    changed_by_username = serializers.CharField(source='changed_by.username', read_only=True)
-    old_level_display = serializers.CharField(source='get_old_level_display', read_only=True)
-    new_level_display = serializers.CharField(source='get_new_level_display', read_only=True)
+    changed_by_username = serializers.CharField(
+        source='changed_by.username',
+        read_only=True,
+        allow_null=True
+    )
+    changed_by_full_name = serializers.CharField(
+        source='changed_by.get_full_name',
+        read_only=True,
+        default='—',
+        allow_null=True
+    )
+    old_level_display = serializers.CharField(
+        source='get_old_level_display',
+        read_only=True
+    )
+    new_level_display = serializers.CharField(
+        source='get_new_level_display',
+        read_only=True
+    )
+    comment = serializers.CharField(
+        read_only=True,
+        allow_blank=True,
+        default=''
+    )
 
     class Meta:
         model = LevelHistory
         fields = [
-            'id', 'old_level', 'old_level_display', 'new_level', 'new_level_display',
-            'changed_by', 'changed_by_username', 'changed_at', 'comment'
+            'id',
+            'old_level',
+            'old_level_display',
+            'new_level',
+            'new_level_display',
+            'changed_by',
+            'changed_by_username',
+            'changed_by_full_name',  # ← добавлено: ФИО вместо username
+            'changed_at',
+            'comment'
         ]
-        read_only_fields = ('id', 'changed_by', 'changed_at')
+        read_only_fields = (
+            'id',
+            'changed_by',
+            'changed_by_username',
+            'changed_by_full_name',
+            'changed_at',
+            'old_level',
+            'new_level',
+            'comment'
+        )
 
 class CommentListSerializer(serializers.ModelSerializer):
     author_username = serializers.CharField(source='author.username', read_only=True)

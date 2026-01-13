@@ -1,12 +1,12 @@
 # apps/kanban/views.py
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from rest_framework import status
 from .models import KanbanBoard, StudentKanbanCard, KanbanColumn
-from .serializers import KanbanBoardSerializer
+from .serializers import KanbanBoardSerializer, KanbanBoardCreateSerializer
 from apps.students.models import Student, LevelHistory
 
 class KanbanBoardDetailView(APIView):
@@ -54,3 +54,26 @@ class MoveCardView(APIView):
         card.save()
 
         return Response({"success": True, "message": "Карточка перемещена"})
+
+
+class KanbanBoardCreateView(APIView):
+    permission_classes = [IsAdminUser]  # Только админы могут создавать доски
+
+    def post(self, request):
+        serializer = KanbanBoardCreateSerializer(data=request.data)
+        if serializer.is_valid():
+            board = serializer.save(created_by=request.user)
+            return Response({
+                "success": True,
+                "message": "Канбан-доска успешно создана",
+                "board": {
+                    "slug": board.slug,
+                    "title": board.title,
+                    "columns_count": board.columns.count()
+                }
+            }, status=status.HTTP_201_CREATED)
+
+        return Response({
+            "success": False,
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)

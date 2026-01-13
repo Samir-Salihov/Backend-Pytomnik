@@ -42,3 +42,38 @@ class KanbanBoardSerializer(serializers.ModelSerializer):
 
     def get_column_order(self, obj):
         return [col.id for col in obj.columns.all().order_by('position')]
+
+
+
+class KanbanColumnCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = KanbanColumn
+        fields = ['slug', 'title', 'color', 'position']
+
+
+class KanbanBoardCreateSerializer(serializers.ModelSerializer):
+    columns = KanbanColumnCreateSerializer(many=True, required=False)
+
+    class Meta:
+        model = KanbanBoard
+        fields = ['slug', 'title', 'columns']
+
+    def create(self, validated_data):
+        columns_data = validated_data.pop('columns', [])
+        board = KanbanBoard.objects.create(**validated_data)
+
+        # Создаём стандартные колонки, если их не передали
+        if not columns_data:
+            default_columns = [
+                {'slug': 'black', 'title': 'Чёрный уровень', 'color': '#000000', 'position': 1},
+                {'slug': 'red', 'title': 'Красный уровень', 'color': '#ef4444', 'position': 2},
+                {'slug': 'yellow', 'title': 'Жёлтый уровень', 'color': '#eab308', 'position': 3},
+                {'slug': 'green', 'title': 'Зелёный уровень', 'color': '#22c55e', 'position': 4},
+            ]
+            columns_data = default_columns
+
+        # Создаём колонки
+        for column_data in columns_data:
+            KanbanColumn.objects.create(board=board, **column_data)
+
+        return board

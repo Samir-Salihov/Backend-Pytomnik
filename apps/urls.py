@@ -17,9 +17,15 @@ from apps.students.views import (
     StudentUpdateView, StudentDeleteView, StudentChangeLevelView,
     StudentLevelHistoryView, StudentCommentsView, CommentUpdateView, 
 )
-from apps.kanban.views import KanbanBoardDetailView, MoveCardView
+from apps.kanban.views import KanbanBoardDetailView, MoveCardView, KanbanBoardCreateView
 
 from apps.export.views import ExportStudentsExcelView
+
+from apps.analytics.views import (
+    AnalyticsDashboardView,
+    LevelDistributionView,
+    AgeGroupDistributionView
+)
 
 
 
@@ -49,7 +55,12 @@ urlpatterns = [
     path('kanban/<str:board_id>/', KanbanBoardDetailView.as_view(), name='board-detail'),
     path('move/', MoveCardView.as_view(), name='move-card'),
 
-    path('export/', ExportStudentsExcelView.as_view(), name='export')
+    path('export/', ExportStudentsExcelView.as_view(), name='export'),
     
+    path('dashboard/', AnalyticsDashboardView.as_view(), name='analytics-dashboard'),
+    path('levels/', LevelDistributionView.as_view(), name='level-distribution'),
+    path('age-groups/', AgeGroupDistributionView.as_view(), name='age-group-distribution'),
+
+    path('boards/create/', KanbanBoardCreateView.as_view(), name='kanban-board-create'),
 ]
 
