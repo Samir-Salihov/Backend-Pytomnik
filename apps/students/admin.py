@@ -31,6 +31,7 @@ class StudentAdmin(admin.ModelAdmin):
     inlines = [MedicalFileInline]
 
     list_display = (
+        'id',
         'full_name',
         'photo_preview',
         'calculated_age',

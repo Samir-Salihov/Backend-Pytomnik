@@ -55,20 +55,30 @@ class StudentSerializer(serializers.ModelSerializer):
         return CommentListSerializer(comments, many=True).data
 
 class StudentCreateSerializer(serializers.ModelSerializer):
+    photo = serializers.ImageField(required=False, allow_null=True)  # ← можно загружать
+
     class Meta:
         model = Student
         fields = [
             'first_name', 'last_name', 'patronymic', 'direction', 'subdivision',
-            'age', 'level', 'status', 'category', 'address_actual', 'address_registered',
-            'phone_personal', 'telegram', 'phone_parent', 'medical_info'
+            'birth_date', 'photo', 'level', 'status', 'category',
+            'address_actual', 'address_registered', 'phone_personal', 'telegram',
+            'phone_parent', 'fio_parent', 'medical_info'
         ]
         extra_kwargs = {
             'first_name': {'required': True},
             'last_name': {'required': True},
-            'age': {'required': True},
+            'birth_date': {'required': True},
             'phone_personal': {'required': True},
             'level': {'required': True},
             'status': {'required': True},
+            'category': {'required': True},
+            'direction': {'required': True},
+            'subdivision': {'required': True},
+            'address_actual': {'required': True},
+            'address_registered': {'required': True},
+            'phone_parent': {'required': True},
+            'fio_parent': {'required': True},
         }
 
     def validate(self, attrs):

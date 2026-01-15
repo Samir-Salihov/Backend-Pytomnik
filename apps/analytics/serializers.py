@@ -1,36 +1,72 @@
+from typing import Dict, List, Optional, Any
+
 from rest_framework import serializers
 
-class LevelDistributionSerializer(serializers.Serializer):
-    black  = serializers.IntegerField()
-    red    = serializers.IntegerField()
-    yellow = serializers.IntegerField()
-    green  = serializers.IntegerField()
+from apps.students.models import Student, LevelHistory
 
-class StatusDistributionSerializer(serializers.Serializer):
-    active   = serializers.IntegerField()
-    fired    = serializers.IntegerField()
-    called_hr = serializers.IntegerField()
 
-class CategoryDistributionSerializer(serializers.Serializer):
-    college        = serializers.IntegerField()
-    patriot        = serializers.IntegerField()
-    alabuga_start  = serializers.IntegerField()
-    alabuga_mulatki = serializers.IntegerField()
+class LevelItemSerializer(serializers.Serializer):
+    level = serializers.CharField()
+    display_name = serializers.CharField(source='get_level_display', read_only=True)
+    count = serializers.IntegerField()
+    percentage = serializers.FloatField()
+    color = serializers.SerializerMethodField()
 
-class MonthlyGrowthSerializer(serializers.Serializer):
-    month = serializers.CharField()  # "2025-12"
+    def get_color(self, obj: Dict[str, Any]) -> str:
+        colors = {
+            'black': '#000000',
+            'red': '#ef4444',
+            'yellow': '#eab308',
+            'green': '#22c55e',
+        }
+        return colors.get(obj['level'], '#6b7280')
+
+
+class StatusItemSerializer(serializers.Serializer):
+    status = serializers.CharField()
+    display_name = serializers.CharField(source='get_status_display', read_only=True)
+    count = serializers.IntegerField()
+    percentage = serializers.FloatField()
+
+
+class CategoryItemSerializer(serializers.Serializer):
+    category = serializers.CharField()
+    display_name = serializers.CharField(source='get_category_display', read_only=True)
+    count = serializers.IntegerField()
+    percentage = serializers.FloatField()
+
+
+class MonthlyGrowthItemSerializer(serializers.Serializer):
+    month = serializers.CharField()  # '2025-12'
     added = serializers.IntegerField()
-    left  = serializers.IntegerField()   # уволенные за месяц
-    net   = serializers.IntegerField()   # чистый прирост
+    left = serializers.IntegerField()
+    net_growth = serializers.IntegerField()
+
+
+class TopSubdivisionSerializer(serializers.Serializer):
+    subdivision = serializers.CharField(allow_null=True)
+    count = serializers.IntegerField()
+    percentage = serializers.FloatField()
+
+
+class HRAccountSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    full_name = serializers.CharField(allow_null=True)
+    changes_count = serializers.IntegerField()
+    last_change = serializers.DateTimeField(allow_null=True)
+
 
 class AnalyticsDashboardSerializer(serializers.Serializer):
-    total_students           = serializers.IntegerField()
-    average_age              = serializers.FloatField()
-    level_distribution       = LevelDistributionSerializer()
-    status_distribution      = StatusDistributionSerializer()
-    category_distribution    = CategoryDistributionSerializer()
-    level_changes_last_30d   = serializers.IntegerField()
-    students_added_last_30d  = serializers.IntegerField()
-    students_left_last_30d   = serializers.IntegerField()
-    monthly_growth_last_12m  = MonthlyGrowthSerializer(many=True)
-    top_5_subdivisions       = serializers.ListField(child=serializers.DictField()) 
+    total_students = serializers.IntegerField(min_value=0)
+    active_students = serializers.IntegerField(min_value=0)
+    average_age = serializers.FloatField(allow_null=True)
+    students_by_level = LevelItemSerializer(many=True)
+    students_by_status = StatusItemSerializer(many=True)
+    students_by_category = CategoryItemSerializer(many=True)
+    level_changes_last_30_days = serializers.IntegerField(min_value=0)
+    students_added_last_30_days = serializers.IntegerField(min_value=0)
+    students_left_last_30_days = serializers.IntegerField(min_value=0)
+    monthly_growth_last_12_months = MonthlyGrowthItemSerializer(many=True)
+    top_5_subdivisions = TopSubdivisionSerializer(many=True)
+    top_5_hr_activity_last_30_days = HRAccountSerializer(many=True)
+    updated_at = serializers.DateTimeField()

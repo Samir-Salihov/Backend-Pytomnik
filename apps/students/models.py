@@ -3,6 +3,10 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 from dateutil.relativedelta import relativedelta
+from apps.kanban.models import KanbanBoard
+import logging
+
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
@@ -122,9 +126,23 @@ class Student(models.Model):
                 raise ValidationError("Возраст должен быть от 14 до 30 лет")
 
     def save(self, *args, **kwargs):
+        # Автоматическое определение доски по категории
+        if self.category == 'alabuga_mulatki':
+            board_id = "start"
+        else:
+            board_id = "polytech"
+
+        try:
+            self.kanban_board = KanbanBoard.objects.get(id=board_id)
+        except KanbanBoard.DoesNotExist:
+            logger.warning(f"Доска {board_id} не найдена для кота {self.full_name}")
+            self.kanban_board = None
+
         if self.pk and kwargs.get('request'):
             self.updated_by = kwargs.pop('request').user
+
         super().save(*args, **kwargs)
+
 
 class LevelHistory(models.Model):
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="level_history")
@@ -142,6 +160,7 @@ class LevelHistory(models.Model):
     def __str__(self):
         return f"{self.student} — {self.get_old_level_display()} → {self.get_new_level_display()}"
 
+
 class Comment(models.Model):
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="comments")
     author = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -155,6 +174,7 @@ class Comment(models.Model):
 
     def __str__(self):
         return f"{self.author} to {self.student}: {self.text[:50]}..."
+
 
 class MedicalFile(models.Model):
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="medical_files")

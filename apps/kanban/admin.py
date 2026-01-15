@@ -1,4 +1,3 @@
-# apps/kanban/admin.py
 from django.contrib import admin
 from django.utils.html import format_html
 from django.urls import reverse
@@ -47,7 +46,7 @@ class KanbanColumnAdmin(admin.ModelAdmin):
     def colored_title(self, obj):
         return format_html(
             '<span style="padding:6px 12px; border-radius:8px; background:{}; color:white; font-weight:600;">{}</span>',
-            obj.color or "#6B7280", obj.slug.upper()
+            obj.color or "#6B7280", obj.get_level_display()
         )
     colored_title.short_description = "Колонка"
 
@@ -71,7 +70,7 @@ class StudentKanbanCardAdmin(admin.ModelAdmin):
         'student__last_name',
         'student__patronymic',
     )
-    list_filter = ('column__board', 'column__slug')
+    list_filter = ('column__board', 'column__level')
     ordering = ('column__board', 'column__position', 'position')
 
     def student_preview(self, obj):
@@ -101,12 +100,12 @@ class StudentKanbanCardAdmin(admin.ModelAdmin):
             '<span style="padding:6px 12px; border-radius:8px; background:{}; color:white; font-weight:bold; font-size:13px;">{} → {}</span>',
             obj.column.color or "#6B7280",
             obj.column.board.title,
-            obj.column.get_slug_display()
+            obj.column.get_level_display()
         )
     column_colored.short_description = "Колонка"
 
     def board_link(self, obj):
-        url = reverse("admin:kanban_kanbanboard_change", args=[obj.column.board.slug])
+        url = reverse("admin:kanban_kanbanboard_change", args=[obj.column.board.id])
         return format_html(
             '<a href="{}" style="color:#3b82f6; font-weight:600;">{}</a>',
             url, obj.column.board.title
@@ -117,14 +116,14 @@ class StudentKanbanCardAdmin(admin.ModelAdmin):
 @admin.register(KanbanBoard)
 class KanbanBoardAdmin(admin.ModelAdmin):
     list_display = (
-        'slug',               # ← вместо 'id' используем slug (он же PK)
+        'id',
         'title',
         'created_by',
         'created_at',
         'total_cards',
         'view_board',
     )
-    search_fields = ('slug', 'title')
+    search_fields = ('id', 'title')
     list_filter = ('created_by',)
     readonly_fields = ('created_at', 'updated_at', 'created_by')
     ordering = ('-created_at',)
@@ -135,8 +134,7 @@ class KanbanBoardAdmin(admin.ModelAdmin):
     total_cards.short_description = "Всего карточек"
 
     def view_board(self, obj):
-        # Можно указать URL фронтенда или админ-страницы
-        url = f"/api/v1/kanban/{obj.slug}/"  # или "/admin/kanban/view/{obj.slug}/"
+        url = f"/api/v1/kanban/{obj.id}/"  
         return format_html(
             '<a href="{}" target="_blank" style="background:#10b981; color:white; padding:8px 16px; border-radius:6px; text-decoration:none; font-weight:bold;">Открыть доску</a>',
             url
@@ -144,6 +142,6 @@ class KanbanBoardAdmin(admin.ModelAdmin):
     view_board.short_description = "Действия"
 
     def save_model(self, request, obj, form, change):
-        if not change:  # только при создании
+        if not change:
             obj.created_by = request.user
         super().save_model(request, obj, form, change)

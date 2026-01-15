@@ -15,8 +15,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 DEBUG = False  # будет переопределяться в dev.py / prod.py
 
-ALLOWED_HOSTS = []
-
 # Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -38,6 +36,8 @@ INSTALLED_APPS = [
     'corsheaders',
     'apps.kanban',
     'apps.export',
+
+    'jazzmin',
 ]
 
 MIDDLEWARE = [
@@ -246,4 +246,36 @@ CELERY_BEAT_SCHEDULE = {
             'expires': 3600,
         }
     },
+}
+
+
+JAZZMIN_SETTINGS = {
+    "site_title": "Питомник Алабуга",
+    "site_header": "Питомник Алабуга",
+    "site_brand": "Питомник",
+    "welcome_sign": "Добро пожаловать в аналитику Питомника",
+    "copyright": "Алабуга Старт & Политех 2026",
+    "search_model": ["students.Student", "kanban.KanbanBoard"],
+    "topmenu_links": [
+        {"name": "Дашборд", "url": "admin:analytics_dashboard", "permissions": ["is_staff"]},
+    ],
+    "show_sidebar": True,
+    "navigation_expanded": True,
+    "icons": {
+        "analytics": "fas fa-chart-line",
+        "students": "fas fa-users",
+        "kanban": "fas fa-columns",
+    },
+    "default_ui_tweaks": {
+        "sidebar_nav_small_text": False,
+        "accent": "accent-primary",
+        "navbar": "navbar-dark",
+        "no_navbar_border": False,
+        "navbar_fixed": True,
+        "layout_boxed": False,
+        "footer_fixed": False,
+        "sidebar_fixed": True,
+        "sidebar_collapse": False,
+        "sidebar_collapse_on_scroll": True,
+    }
 }

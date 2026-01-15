@@ -1,4 +1,3 @@
-# apps/kanban/views.py
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
@@ -12,13 +11,14 @@ from apps.students.models import Student, LevelHistory
 class KanbanBoardDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, board_id: str):
+    def get(self, request, board_id):
         board = get_object_or_404(
             KanbanBoard.objects.prefetch_related('columns__cards__student'),
-            id=board_id
+            id=board_id  
         )
         serializer = KanbanBoardSerializer(board)
         return Response(serializer.data)
+
 
 class MoveCardView(APIView):
     permission_classes = [IsAuthenticated]
@@ -37,14 +37,14 @@ class MoveCardView(APIView):
 
         old_level = card.student.level
 
-        card.student.level = new_column.id
+        card.student.level = new_column.level  # ← используем level
         card.student.updated_by = request.user
         card.student.save()
 
         LevelHistory.objects.create(
             student=card.student,
             old_level=old_level,
-            new_level=new_column.id,
+            new_level=new_column.level,
             changed_by=request.user,
             comment=request.data.get("comment", "")
         )
@@ -57,7 +57,7 @@ class MoveCardView(APIView):
 
 
 class KanbanBoardCreateView(APIView):
-    permission_classes = [IsAdminUser]  # Только админы могут создавать доски
+    permission_classes = [IsAdminUser]
 
     def post(self, request):
         serializer = KanbanBoardCreateSerializer(data=request.data)
@@ -67,7 +67,7 @@ class KanbanBoardCreateView(APIView):
                 "success": True,
                 "message": "Канбан-доска успешно создана",
                 "board": {
-                    "slug": board.slug,
+                    "id": board.id,
                     "title": board.title,
                     "columns_count": board.columns.count()
                 }

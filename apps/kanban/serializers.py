@@ -1,7 +1,7 @@
-# apps/kanban/serializers.py
 from rest_framework import serializers
 from apps.students.models import Student
 from .models import KanbanBoard, KanbanColumn, StudentKanbanCard
+
 
 class StudentCardSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(source='student.id')
@@ -25,12 +25,15 @@ class StudentCardSerializer(serializers.ModelSerializer):
             tags.append({"text": "Вызов к HR", "color": "#F59E0B"})
         return tags
 
+
 class KanbanColumnSerializer(serializers.ModelSerializer):
     cards = StudentCardSerializer(many=True, read_only=True)
+    level_display = serializers.CharField(source='get_level_display', read_only=True)
 
     class Meta:
         model = KanbanColumn
-        fields = ['id', 'title', 'color', 'cards']
+        fields = ['id', 'level', 'level_display', 'title', 'color', 'cards']
+
 
 class KanbanBoardSerializer(serializers.ModelSerializer):
     columns = KanbanColumnSerializer(many=True, read_only=True)
@@ -44,11 +47,10 @@ class KanbanBoardSerializer(serializers.ModelSerializer):
         return [col.id for col in obj.columns.all().order_by('position')]
 
 
-
 class KanbanColumnCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = KanbanColumn
-        fields = ['slug', 'title', 'color', 'position']
+        fields = ['level', 'title', 'color', 'position']
 
 
 class KanbanBoardCreateSerializer(serializers.ModelSerializer):
@@ -56,7 +58,7 @@ class KanbanBoardCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = KanbanBoard
-        fields = ['slug', 'title', 'columns']
+        fields = ['id', 'title', 'columns']
 
     def create(self, validated_data):
         columns_data = validated_data.pop('columns', [])
@@ -65,10 +67,10 @@ class KanbanBoardCreateSerializer(serializers.ModelSerializer):
         # Создаём стандартные колонки, если их не передали
         if not columns_data:
             default_columns = [
-                {'slug': 'black', 'title': 'Чёрный уровень', 'color': '#000000', 'position': 1},
-                {'slug': 'red', 'title': 'Красный уровень', 'color': '#ef4444', 'position': 2},
-                {'slug': 'yellow', 'title': 'Жёлтый уровень', 'color': '#eab308', 'position': 3},
-                {'slug': 'green', 'title': 'Зелёный уровень', 'color': '#22c55e', 'position': 4},
+                {'level': 'black', 'title': 'Чёрный уровень', 'color': '#000000', 'position': 1},
+                {'level': 'red', 'title': 'Красный уровень', 'color': '#ef4444', 'position': 2},
+                {'level': 'yellow', 'title': 'Жёлтый уровень', 'color': '#eab308', 'position': 3},
+                {'level': 'green', 'title': 'Зелёный уровень', 'color': '#22c55e', 'position': 4},
             ]
             columns_data = default_columns
 
