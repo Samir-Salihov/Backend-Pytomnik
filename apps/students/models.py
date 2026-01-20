@@ -3,7 +3,6 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 from dateutil.relativedelta import relativedelta
-from apps.kanban.models import KanbanBoard
 import logging
 
 logger = logging.getLogger(__name__)
@@ -15,6 +14,7 @@ LEVEL_CHOICES = [
     ('red', 'Красный'),
     ('yellow', 'Жёлтый'),
     ('green', 'Зелёный'),
+    ('fired', 'Уволен'),
 ]
 
 STATUS_CHOICES = [
@@ -65,7 +65,7 @@ class Student(models.Model):
 
     photo = models.ImageField("Фото студента", upload_to='students/photos/', blank=True, null=True)
 
-    level = models.CharField("Уровень доступа", max_length=10, choices=LEVEL_CHOICES, default='black')
+    level = models.CharField("Уровень доступа", max_length=10, choices=LEVEL_CHOICES, null=True, blank=True)
     status = models.CharField("Статус", max_length=20, choices=STATUS_CHOICES, default='active')
     category = models.CharField("Категория", max_length=30, choices=CATEGORY_CHOICES)
 
@@ -126,28 +126,30 @@ class Student(models.Model):
                 raise ValidationError("Возраст должен быть от 14 до 30 лет")
 
     def save(self, *args, **kwargs):
-        # Автоматическое определение доски по категории
-        if self.category == 'alabuga_mulatki':
-            board_id = "start"
-        else:
-            board_id = "polytech"
-
-        try:
-            self.kanban_board = KanbanBoard.objects.get(id=board_id)
-        except KanbanBoard.DoesNotExist:
-            logger.warning(f"Доска {board_id} не найдена для кота {self.full_name}")
-            self.kanban_board = None
-
         if self.pk and kwargs.get('request'):
             self.updated_by = kwargs.pop('request').user
+
+        # Если статус меняется на 'called_hr' — создаём HrCall ТОЛЬКО ОДИН РАЗ
+        if self.pk:
+            old = Student.objects.only('status').get(pk=self.pk)
+            if old.status != 'called_hr' and self.status == 'called_hr':
+                from apps.hr_calls.models import HrCall
+                # Проверяем, нет ли уже вызова для этого кота
+                if not HrCall.objects.filter(student=self, person_type='student').exists():
+                    HrCall.objects.create(
+                        person_type='student',
+                        student=self,
+                        reason="",  # пустая причина
+                        created_by=self.updated_by
+                    )
 
         super().save(*args, **kwargs)
 
 
 class LevelHistory(models.Model):
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="level_history")
-    old_level = models.CharField(max_length=10, choices=LEVEL_CHOICES)
-    new_level = models.CharField(max_length=10, choices=LEVEL_CHOICES)
+    old_level = models.CharField(max_length=10, choices=LEVEL_CHOICES, null=True, blank=True)
+    new_level = models.CharField(max_length=10, choices=LEVEL_CHOICES, null=True, blank=True)
     changed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     changed_at = models.DateTimeField(auto_now_add=True)
     comment = models.TextField(blank=True)

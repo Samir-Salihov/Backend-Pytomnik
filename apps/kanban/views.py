@@ -8,6 +8,7 @@ from .models import KanbanBoard, StudentKanbanCard, KanbanColumn
 from .serializers import KanbanBoardSerializer, KanbanBoardCreateSerializer
 from apps.students.models import Student, LevelHistory
 
+
 class KanbanBoardDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -37,21 +38,9 @@ class MoveCardView(APIView):
 
         old_level = card.student.level
 
-        card.student.level = new_column.level  # ← используем level
-        card.student.updated_by = request.user
-        card.student.save()
-
-        LevelHistory.objects.create(
-            student=card.student,
-            old_level=old_level,
-            new_level=new_column.level,
-            changed_by=request.user,
-            comment=request.data.get("comment", "")
-        )
-
         card.column = new_column
         card.position = position
-        card.save()
+        card.save()  
 
         return Response({"success": True, "message": "Карточка перемещена"})
 

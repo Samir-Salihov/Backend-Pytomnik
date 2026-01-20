@@ -97,7 +97,7 @@ class AnalyticsAdmin(admin.ModelAdmin):
 
         # Статусы
         statuses = base_qs.values('status').annotate(count=Count('id'))
-        status_data = [
+        status_data = [ 
             {
                 "status": item['status'],
                 "display_name": dict(STATUS_CHOICES).get(item['status'], item['status']),

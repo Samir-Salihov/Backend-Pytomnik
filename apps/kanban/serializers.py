@@ -64,17 +64,17 @@ class KanbanBoardCreateSerializer(serializers.ModelSerializer):
         columns_data = validated_data.pop('columns', [])
         board = KanbanBoard.objects.create(**validated_data)
 
-        # Создаём стандартные колонки, если их не передали
+        # Создаём стандартные колонки + "Уволенные"
         if not columns_data:
             default_columns = [
                 {'level': 'black', 'title': 'Чёрный уровень', 'color': '#000000', 'position': 1},
                 {'level': 'red', 'title': 'Красный уровень', 'color': '#ef4444', 'position': 2},
                 {'level': 'yellow', 'title': 'Жёлтый уровень', 'color': '#eab308', 'position': 3},
                 {'level': 'green', 'title': 'Зелёный уровень', 'color': '#22c55e', 'position': 4},
+                {'level': 'fired', 'title': 'Уволенные', 'color': '#6B7280', 'position': 5},
             ]
             columns_data = default_columns
 
-        # Создаём колонки
         for column_data in columns_data:
             KanbanColumn.objects.create(board=board, **column_data)
 

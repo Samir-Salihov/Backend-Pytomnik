@@ -1,49 +1,65 @@
-# docker-compose.yml
 version: '3.9'
 
 services:
-  db:
-    image: postgres:15
-    volumes:
-      - postgres_data:/var/lib/postgresql/data/
-    environment:
-      POSTGRES_DB: alauga_pitomnik
-      POSTGRES_USER: pitomnik_user
-      POSTGRES_PASSWORD: supersecretpassword
-    restart: always
-
-  redis:
-    image: redis:7-alpine
-    restart: always
-
-  backend:
+  web:
     build: .
-    command: gunicorn core.wsgi:application --bind 0.0.0.0:8000 --workers 4 --worker-class uvicorn.workers.UvicornWorker
+    command: gunicorn --bind 0.0.0.0:8000 core.wsgi:application  # или python manage.py runserver 0.0.0.0:8000
     volumes:
       - .:/app
-      - static_volume:/app/staticfiles
-      - media_volume:/app/media
+      - static_volume:/app/staticfiles  # для статики
+    ports:
+      - "8000:8000"
     env_file:
-      - .env.prod
+      - .env.example
     depends_on:
       - db
       - redis
-    restart: always
+    restart: unless-stopped
 
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-      - "443:443"
+  db:
+    image: postgres:16-alpine
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - static_volume:/app/staticfiles
-      - media_volume:/app/media
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  # Опционально — Celery worker (если используешь Celery)
+  celery:
+    build: .
+    command: celery -A core worker -l info
+    volumes:
+      - .:/app
+    env_file:
+      - .env.example
     depends_on:
-      - backend
-    restart: always
+      - redis
+      - db
+    restart: unless-stopped
+
+  # Опционально — Celery beat (периодические задачи)
+  celery-beat:
+    build: .
+    command: celery -A core beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    volumes:
+      - .:/app
+    env_file:
+      - .env.example
+    depends_on:
+      - redis
+      - db
+    restart: unless-stopped
 
 volumes:
   postgres_data:
   static_volume:
-  media_volume:

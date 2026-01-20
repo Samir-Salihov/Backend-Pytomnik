@@ -7,6 +7,7 @@ from django.shortcuts import get_object_or_404
 
 from .models import Student, LevelHistory, Comment, LEVEL_CHOICES  
 from .serializers import (
+    StudentDetailSerializer,
     StudentSerializer,
     StudentCreateSerializer,
     StudentUpdateSerializer,
@@ -35,7 +36,7 @@ class StudentDetailView(APIView):
 
     def get(self, request, pk):
         student = get_object_or_404(Student, pk=pk)
-        serializer = StudentSerializer(student)
+        serializer = StudentDetailSerializer(student) 
         return Response({
             "success": True,
             "student": serializer.data
@@ -43,7 +44,7 @@ class StudentDetailView(APIView):
 
 
 class StudentCreateView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         serializer = StudentCreateSerializer(data=request.data, context={'request': request})
@@ -68,7 +69,7 @@ class StudentCreateView(APIView):
         }, status=status.HTTP_400_BAD_REQUEST)
 
 class StudentUpdateView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated]
 
     def put(self, request, pk):
         return self._update_student(request, pk, partial=False)
@@ -224,3 +225,15 @@ class CommentUpdateView(APIView):
             "message": "Ошибка при обновлении",
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
+
+class CommentDeleteView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def delete(self, request, pk):
+        comment = get_object_or_404(Comment, pk=pk)
+        comment_text = comment.text[:20] + ('...' if len(comment.text) > 20 else '')
+        comment.delete()
+        return Response({
+            "success": True,
+            "message": f"Комментарий «{comment_text}» успешно удалён"
+        }, status=status.HTTP_200_OK)

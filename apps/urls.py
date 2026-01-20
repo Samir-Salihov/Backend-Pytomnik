@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.urls import path, include
+from apps.hr_calls.views import HrCallCreateView, HrCallDetailView, HrCallListView, HrCommentCreateView, HrCommentDetailView, HrCommentListView, HrFileCreateView, HrFileDetailView, HrFileListView
 from apps.users.views import (
     CustomLoginView,
     RegisterView,
@@ -12,7 +13,7 @@ from apps.users.views import (
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 from apps.students.views import (
-    StudentListView, StudentDetailView, StudentCreateView,
+    CommentDeleteView, StudentListView, StudentDetailView, StudentCreateView,
     StudentUpdateView, StudentDeleteView, StudentChangeLevelView,
     StudentLevelHistoryView, StudentCommentsView, CommentUpdateView, 
 )
@@ -50,6 +51,7 @@ urlpatterns = [
     path('students/<int:pk>/level-history/', StudentLevelHistoryView.as_view(), name='level-history'),
     path('students/<int:pk>/comments/', StudentCommentsView.as_view(), name='student-comments'),
     path('students/<int:student_pk>/comments/<int:comment_pk>/', CommentUpdateView.as_view(), name='comment-update'),
+    path('students/<int:student_pk>/comments/<int:comment_pk>/delete/', CommentDeleteView.as_view(), name='comment-delete'),
     path('users/', UserListView.as_view(), name='user-list'),
     path('kanban/<str:board_id>/', KanbanBoardDetailView.as_view(), name='board-detail'),  
     path('move/', MoveCardView.as_view(), name='move-card'),
@@ -62,4 +64,20 @@ urlpatterns = [
     path('levels/', LevelDistributionView.as_view(), name='level-distribution'),
 
     path('boards/create/', KanbanBoardCreateView.as_view(), name='kanban-board-create'),
+
+    # Вызовы к HR
+    path('hr-calls/', HrCallListView.as_view(), name='hr_call_list'),
+    path('hr-calls/create/', HrCallCreateView.as_view(), name='hr_call_create'),
+    path('hr-calls/<int:pk>/', HrCallDetailView.as_view(), name='hr_call_detail'),
+
+    # Комментарии
+    path('hr-calls/<int:pk>/comments/', HrCommentListView.as_view(), name='hr_comment_list'),
+    path('hr-calls/<int:pk>/comments/create/', HrCommentCreateView.as_view(), name='hr_comment_create'),
+    path('hr-calls/<int:call_pk>/comments/<int:pk>/', HrCommentDetailView.as_view(), name='hr_comment_detail'),
+
+    # Файлы
+    path('hr-calls/<int:pk>/files/', HrFileListView.as_view(), name='hr_file_list'),
+    path('hr-calls/<int:pk>/files/create/', HrFileCreateView.as_view(), name='hr_file_create'),
+    path('hr-calls/<int:call_pk>/files/<int:pk>/', HrFileDetailView.as_view(), name='hr_file_detail'),
+
 ]

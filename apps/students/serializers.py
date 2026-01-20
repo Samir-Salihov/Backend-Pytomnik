@@ -1,5 +1,7 @@
 # apps/students/serializers.py
 from rest_framework import serializers
+
+from apps.kanban.models import StudentKanbanCard
 from .models import Student, LevelHistory, Comment
 from django.contrib.auth import get_user_model
 
@@ -223,3 +225,93 @@ class CommentUpdateSerializer(serializers.ModelSerializer):
         instance.text = validated_data['text']
         instance.save()
         return instance
+    
+
+class StudentDetailSerializer(serializers.ModelSerializer):
+    """
+    Детальный сериализатор для одного студента — возвращает ВСЁ, что есть в модели.
+    Используется в StudentDetailView для API /students/<pk>/
+    """
+    full_name = serializers.SerializerMethodField(read_only=True)
+    age = serializers.SerializerMethodField(read_only=True)
+    level_display = serializers.CharField(source='get_level_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    photo_url = serializers.SerializerMethodField(read_only=True)
+    created_by_username = serializers.CharField(source='created_by.username', read_only=True, allow_null=True)
+    updated_by_username = serializers.CharField(source='updated_by.username', read_only=True, allow_null=True)
+    level_history = serializers.SerializerMethodField(read_only=True)
+    comments = serializers.SerializerMethodField(read_only=True)
+    medical_files = serializers.SerializerMethodField(read_only=True)
+    kanban_card = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = Student
+        fields = [
+            # Основные данные
+            'id', 'first_name', 'last_name', 'patronymic', 'full_name',
+            'direction', 'subdivision', 'birth_date', 'age',
+            'level', 'level_display', 'status', 'status_display',
+            'category', 'category_display',
+            
+            # Контакты и адреса
+            'address_actual', 'address_registered',
+            'phone_personal', 'telegram', 'phone_parent', 'fio_parent',
+            
+            # Медицина и фото
+            'medical_info', 'photo', 'photo_url', 'medical_files',
+            
+            # Системные поля
+            'created_at', 'updated_at', 'created_by_username', 'updated_by_username',
+            'last_changed_field',
+            
+            # Связи и история
+            'level_history', 'comments', 'kanban_card',
+        ]
+
+    # Вычисляемые поля
+    def get_full_name(self, obj):
+        return obj.full_name
+
+    def get_age(self, obj):
+        return obj.age
+
+    def get_photo_url(self, obj):
+        if obj.photo:
+            return obj.photo.url
+        return "/static/images/default_student.png"  # ← укажи свой дефолтный путь
+
+    def get_level_history(self, obj):
+        history = obj.level_history.all().order_by('-changed_at')[:20]  # последние 20
+        return LevelHistorySerializer(history, many=True).data
+
+    def get_comments(self, obj):
+        comments = obj.comments.all().order_by('-created_at')[:50]  # последние 50
+        return CommentListSerializer(comments, many=True).data
+
+    def get_medical_files(self, obj):
+        files = obj.medical_files.all().order_by('-uploaded_at')
+        return [
+            {
+                "id": f.id,
+                "description": f.description,
+                "file_url": f.file.url if f.file else None,
+                "uploaded_at": f.uploaded_at.strftime("%d.%m.%Y %H:%M")
+            }
+            for f in files
+        ]
+
+    def get_kanban_card(self, obj):
+        try:
+            card = obj.kanban_card
+            return {
+                "id": card.id,
+                "column_id": card.column.id,
+                "column_title": card.column.title,
+                "column_level": card.column.level,
+                "position": card.position,
+                "board_id": card.column.board.id,
+                "board_title": card.column.board.title
+            }
+        except StudentKanbanCard.DoesNotExist:
+            return None

@@ -13,7 +13,7 @@ SECRET_KEY = os.getenv('SECRET_KEY') or get_random_secret_key()
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-DEBUG = False  # будет переопределяться в dev.py / prod.py
+DEBUG = False
 
 # Application definition
 INSTALLED_APPS = [
@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'apps.kanban',
     'apps.export',
+    'apps.hr_calls',
 
     'jazzmin',
 ]

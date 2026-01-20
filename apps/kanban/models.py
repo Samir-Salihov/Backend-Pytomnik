@@ -9,6 +9,15 @@ LEVEL_CHOICES = [
     ('red', 'Красный уровень'),
     ('yellow', 'Жёлтый уровень'),
     ('green', 'Зелёный уровень'),
+    ('fired', 'Уволен'),  # новая колонка
+]
+
+COLOR_CHOICES = [
+    ('#000000', 'Чёрный'),
+    ('#ef4444', 'Красный'),
+    ('#eab308', 'Жёлтый'),
+    ('#22c55e', 'Зелёный'),
+    ('#6B7280', 'Серый'),  # для уволенных
 ]
 
 class KanbanBoard(models.Model):
@@ -26,7 +35,7 @@ class KanbanBoard(models.Model):
         return self.title
 
     def get_students(self):
-        from apps.students.models import Student  # ← импорт внутри метода — нет цикла
+        from apps.students.models import Student
         if self.id == "polytech":
             return Student.objects.exclude(category__in=['alabuga_mulatki'])
         elif self.id == "start":
@@ -35,10 +44,10 @@ class KanbanBoard(models.Model):
 
 
 class KanbanColumn(models.Model):
-    board = models.ForeignKey(KanbanBoard, on_delete=models.CASCADE, related_name="columns")
+    board = models.ForeignKey('kanban.KanbanBoard', on_delete=models.CASCADE, related_name="columns")
     level = models.CharField("Уровень", max_length=30, choices=LEVEL_CHOICES)
     title = models.CharField("Название колонки", max_length=100)
-    color = models.CharField("Цвет (HEX)", max_length=7, default="#6B7280")
+    color = models.CharField("Цвет (HEX)", max_length=7, choices=COLOR_CHOICES)
     position = models.PositiveSmallIntegerField("Позиция", default=0)
 
     class Meta:
@@ -59,11 +68,11 @@ class KanbanColumn(models.Model):
 
 class StudentKanbanCard(models.Model):
     student = models.OneToOneField(
-        'students.Student',  # ← строка вместо прямого импорта — ключевой фикс
+        'students.Student',
         on_delete=models.CASCADE,
         related_name="kanban_card"
     )
-    column = models.ForeignKey(KanbanColumn, on_delete=models.CASCADE, related_name="cards")
+    column = models.ForeignKey('kanban.KanbanColumn', on_delete=models.CASCADE, related_name="cards")
     position = models.PositiveIntegerField("Позиция в колонке", default=0)
 
     class Meta:
@@ -81,7 +90,6 @@ class StudentKanbanCard(models.Model):
 
     def clean(self):
         board_id = self.column.board.id
-        # Импорт внутри метода — нет цикла
         from apps.students.models import Student
         category = self.student.category
 
@@ -93,4 +101,16 @@ class StudentKanbanCard(models.Model):
 
     def save(self, *args, **kwargs):
         self.clean()
+
+        # Обновляем статус и уровень студента через update() — безопасно, без рекурсии
+        if self.column.level == 'fired':
+            status = 'fired'
+            level = 'fired'  # уровень 'fired' — серый цвет
+        else:
+            status = 'active'
+            level = self.column.level  # уровень колонки — цвет появляется
+
+        from apps.students.models import Student
+        Student.objects.filter(id=self.student.id).update(status=status, level=level)
+
         super().save(*args, **kwargs)
