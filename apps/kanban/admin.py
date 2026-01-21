@@ -51,7 +51,8 @@ class KanbanColumnAdmin(admin.ModelAdmin):
     colored_title.short_description = "Колонка"
 
     def cards_count(self, obj):
-        count = obj.cards.count()
+        # Безопасный способ — считаем через фильтр по модели (не зависит от related_name)
+        count = StudentKanbanCard.objects.filter(column=obj).count()
         return format_html('<b>{}</b>', count)
     cards_count.short_description = "Карточек"
 
@@ -74,10 +75,9 @@ class StudentKanbanCardAdmin(admin.ModelAdmin):
     ordering = ('column__board', 'column__position', 'position')
 
     def student_preview(self, obj):
-        photo_url = "/static/admin/img/icon-unknown.svg" 
+        photo_url = "/static/admin/img/icon-unknown.svg"
         if hasattr(obj.student, 'photo') and obj.student.photo:
             photo_url = obj.student.photo.url
-
         return format_html(
             '''
             <div style="display:flex; align-items:center; gap:12px; min-width:220px;">
@@ -134,7 +134,7 @@ class KanbanBoardAdmin(admin.ModelAdmin):
     total_cards.short_description = "Всего карточек"
 
     def view_board(self, obj):
-        url = f"/api/v1/kanban/{obj.id}/"  
+        url = f"/api/v1/kanban/{obj.id}/"
         return format_html(
             '<a href="{}" target="_blank" style="background:#10b981; color:white; padding:8px 16px; border-radius:6px; text-decoration:none; font-weight:bold;">Открыть доску</a>',
             url

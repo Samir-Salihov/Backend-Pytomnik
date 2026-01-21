@@ -67,13 +67,10 @@ class KanbanColumn(models.Model):
 
 
 class StudentKanbanCard(models.Model):
-    student = models.OneToOneField(
-        'students.Student',
-        on_delete=models.CASCADE,
-        related_name="kanban_card"
-    )
-    column = models.ForeignKey('kanban.KanbanColumn', on_delete=models.CASCADE, related_name="cards")
-    position = models.PositiveIntegerField("Позиция в колонке", default=0)
+    student = models.ForeignKey('students.Student', on_delete=models.CASCADE, related_name='kanban_card')
+    column = models.ForeignKey('KanbanColumn', on_delete=models.CASCADE, related_name='cards')
+    position = models.PositiveIntegerField(default=0)
+    labels = models.JSONField(default=list, blank=True)
 
     class Meta:
         ordering = ['position']
@@ -93,10 +90,10 @@ class StudentKanbanCard(models.Model):
         from apps.students.models import Student
         category = self.student.category
 
-        if category in ['alabuga_mulatki'] and board_id != 'start':
-            raise ValidationError("Студент категории Алабуга Старт не может быть на доске Политеха")
+        if category in ['alabuga_mulatki', 'alabuga_start_sng', 'patriot', "alabuga_start_rf"] and board_id != 'start':
+            raise ValidationError("Студент категории Алабуга Старт и Патриоты не может быть на доске Политеха")
 
-        if category in ['alabuga_start', 'college', 'patriot'] and board_id != 'polytech':
+        if category in ['college'] and board_id != 'polytech':
             raise ValidationError("Студент категории Политех не может быть на доске Алабуга Старт")
 
     def save(self, *args, **kwargs):

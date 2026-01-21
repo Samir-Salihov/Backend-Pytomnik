@@ -30,16 +30,15 @@ class HrCallSerializer(serializers.ModelSerializer):
     comments = HrCommentSerializer(many=True, read_only=True)
     files = HrFileSerializer(many=True, read_only=True)
     created_by_username = serializers.CharField(source='created_by.username', read_only=True)
-    problem_resolved = serializers.BooleanField(read_only=True)  # readonly для фронта
 
     class Meta:
         model = HrCall
         fields = [
             'id', 'person_type', 'student', 'full_name', 'reason', 'solution',
-            'visit_datetime', 'problem_resolved', 'created_by_username', 'created_at', 'updated_at',
+            'visit_datetime', 'created_by_username', 'created_at', 'updated_at',
             'comments', 'files'
         ]
-        read_only_fields = ['id', 'created_by_username', 'created_at', 'updated_at', 'comments', 'files', 'problem_resolved']
+        read_only_fields = ['id', 'created_by_username', 'created_at', 'updated_at', 'comments', 'files']
 
     def get_full_name(self, obj):
         if obj.person_type == 'student' and obj.student:
@@ -54,9 +53,9 @@ class HrCallCreateSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         if attrs['person_type'] == 'student':
-            raise serializers.ValidationError({"person_type": "Для котов вызов создаётся автоматически при смене статуса"})
+            raise serializers.ValidationError({"person_type": "Для котов вызов создаётся автоматически при смене статуса. Не создавайте вручную."})
         if attrs['person_type'] == 'college' and not attrs.get('full_name'):
-            raise serializers.ValidationError({"full_name": "Для колледжиста укажите ФИО"})
+            raise serializers.ValidationError({"full_name": "Для типа 'college' укажите ФИО"})
         return attrs
 
     def create(self, validated_data):

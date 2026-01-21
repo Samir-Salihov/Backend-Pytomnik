@@ -22,7 +22,7 @@ class HrCallAdmin(admin.ModelAdmin):
         'get_person_name', 'person_type', 'reason_short', 'solution_short', 
         'visit_datetime', 'problem_resolved', 'created_by', 'created_at'
     )
-    list_filter = ('person_type', 'problem_resolved', 'visit_datetime')
+    list_filter = ('person_type', 'visit_datetime')
     search_fields = ('full_name', 'student__full_name', 'reason')
     inlines = [HrCommentInline, HrFileInline]
     ordering = ['-created_at']

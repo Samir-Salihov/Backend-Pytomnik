@@ -74,18 +74,13 @@ class HrCall(models.Model):
 
     def clean(self):
         if self.person_type == 'student' and not self.student:
-            raise ValidationError("Для типа 'student' вызов создаётся автоматически при смене статуса")
+            raise ValidationError("Для типа 'student' необходимо указать кота")
         if self.person_type == 'college' and not self.full_name:
-            raise ValidationError("Для типа 'college' укажите ФИО")
+            raise ValidationError("Для типа 'college' необходимо указать ФИО")
 
     def save(self, *args, **kwargs):
         if self.person_type == 'student' and self.student:
             self.full_name = self.student.full_name
-
-        # Если проблема решена — возвращаем статус кота на active
-        if self.problem_resolved and self.student and self.student.status == 'called_hr':
-            self.student.status = 'active'
-            self.student.save(update_fields=['status'])
 
         super().save(*args, **kwargs)
 

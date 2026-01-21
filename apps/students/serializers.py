@@ -1,4 +1,3 @@
-# apps/students/serializers.py
 from rest_framework import serializers
 
 from apps.kanban.models import StudentKanbanCard
@@ -28,7 +27,7 @@ class StudentSerializer(serializers.ModelSerializer):
             'address_actual', 'address_registered', 'phone_personal', 'telegram',
             'phone_parent', 'medical_info', 'created_at', 'updated_at',
             'created_by', 'created_by_username', 'updated_by', 'updated_by_username',
-            'last_changed_field', 'level_history', 'comments'
+            'last_changed_field', 'level_history', 'comments', 'is_called_to_hr'
         ]
         read_only_fields = (
             'id', 'created_at', 'updated_at', 'created_by', 'updated_by',
@@ -56,6 +55,7 @@ class StudentSerializer(serializers.ModelSerializer):
         comments = obj.comments.all().order_by('-created_at')
         return CommentListSerializer(comments, many=True).data
 
+
 class StudentCreateSerializer(serializers.ModelSerializer):
     photo = serializers.ImageField(required=False, allow_null=True)  # ← можно загружать
 
@@ -65,7 +65,7 @@ class StudentCreateSerializer(serializers.ModelSerializer):
             'first_name', 'last_name', 'patronymic', 'direction', 'subdivision',
             'birth_date', 'photo', 'level', 'status', 'category',
             'address_actual', 'address_registered', 'phone_personal', 'telegram',
-            'phone_parent', 'fio_parent', 'medical_info'
+            'phone_parent', 'fio_parent', 'medical_info', 'is_called_to_hr'
         ]
         extra_kwargs = {
             'first_name': {'required': True},
@@ -75,6 +75,7 @@ class StudentCreateSerializer(serializers.ModelSerializer):
             'level': {'required': True},
             'status': {'required': True},
             'category': {'required': True},
+            'is_called_to_hr': {'required': False, 'default': False},
             'direction': {'required': True},
             'subdivision': {'required': True},
             'address_actual': {'required': True},
@@ -99,13 +100,14 @@ class StudentCreateSerializer(serializers.ModelSerializer):
         )
         return student
 
+
 class StudentUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Student
         fields = [
             'first_name', 'last_name', 'patronymic', 'direction', 'subdivision',
             'age', 'level', 'status', 'category', 'address_actual', 'address_registered',
-            'phone_personal', 'telegram', 'phone_parent', 'medical_info'
+            'phone_personal', 'telegram', 'phone_parent', 'medical_info', 'is_called_to_hr'
         ]
 
     def validate(self, attrs):
@@ -122,6 +124,7 @@ class StudentUpdateSerializer(serializers.ModelSerializer):
         instance.updated_by = request.user
         instance.save()
         return instance
+
 
 class LevelHistorySerializer(serializers.ModelSerializer):
     changed_by_username = serializers.CharField(
@@ -174,6 +177,7 @@ class LevelHistorySerializer(serializers.ModelSerializer):
             'comment'
         )
 
+
 class CommentListSerializer(serializers.ModelSerializer):
     author_username = serializers.CharField(source='author.username', read_only=True)
     is_edited_label = serializers.SerializerMethodField()
@@ -185,6 +189,7 @@ class CommentListSerializer(serializers.ModelSerializer):
 
     def get_is_edited_label(self, obj):
         return "ред." if obj.is_edited else ""
+
 
 class CommentCreateSerializer(serializers.ModelSerializer):
     class Meta:
@@ -207,6 +212,7 @@ class CommentCreateSerializer(serializers.ModelSerializer):
             text=validated_data['text']
         )
 
+
 class CommentUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Comment
@@ -225,7 +231,7 @@ class CommentUpdateSerializer(serializers.ModelSerializer):
         instance.text = validated_data['text']
         instance.save()
         return instance
-    
+
 
 class StudentDetailSerializer(serializers.ModelSerializer):
     """
@@ -252,7 +258,7 @@ class StudentDetailSerializer(serializers.ModelSerializer):
             'id', 'first_name', 'last_name', 'patronymic', 'full_name',
             'direction', 'subdivision', 'birth_date', 'age',
             'level', 'level_display', 'status', 'status_display',
-            'category', 'category_display',
+            'category', 'category_display', 'is_called_to_hr',
             
             # Контакты и адреса
             'address_actual', 'address_registered',
@@ -303,7 +309,9 @@ class StudentDetailSerializer(serializers.ModelSerializer):
 
     def get_kanban_card(self, obj):
         try:
-            card = obj.kanban_card
+            card = obj.kanban_card.first()  
+            if not card:
+                return None
             return {
                 "id": card.id,
                 "column_id": card.column.id,
@@ -311,7 +319,8 @@ class StudentDetailSerializer(serializers.ModelSerializer):
                 "column_level": card.column.level,
                 "position": card.position,
                 "board_id": card.column.board.id,
-                "board_title": card.column.board.title
+                "board_title": card.column.board.title,
+                "labels": card.labels  
             }
-        except StudentKanbanCard.DoesNotExist:
+        except Exception:
             return None

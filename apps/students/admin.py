@@ -1,4 +1,3 @@
-# apps/students/admin.py
 from django.contrib import admin
 from django import forms
 from django.shortcuts import render
@@ -11,6 +10,7 @@ from io import BytesIO
 from .models import Student, LevelHistory, Comment, MedicalFile
 import pandas as pd
 from django.urls import reverse 
+from apps.hr_calls.models import HrCall
 
 class MedicalFileInline(admin.TabularInline):
     model = MedicalFile
@@ -37,6 +37,7 @@ class StudentAdmin(admin.ModelAdmin):
         'calculated_age',
         'level_badge',
         'status_badge',
+        'hr_status_badge',
         'category',
         'subdivision',
         'fio_parent',
@@ -45,7 +46,7 @@ class StudentAdmin(admin.ModelAdmin):
         'created_at',
         'updated_at',
     )
-    list_filter = ('level', 'status', 'category', 'subdivision', 'created_by', 'updated_by')
+    list_filter = ('level', 'status', 'is_called_to_hr', 'category', 'subdivision', 'created_by', 'updated_by')
     search_fields = ('last_name', 'first_name', 'patronymic', 'phone_personal', 'telegram', 'fio_parent')
     ordering = ('-updated_at',)
     readonly_fields = (
@@ -58,7 +59,7 @@ class StudentAdmin(admin.ModelAdmin):
             'fields': ('first_name', 'last_name', 'patronymic', 'birth_date', 'calculated_age', 'photo', 'photo_preview')
         }),
         ('Образование и работа', {'fields': ('direction', 'subdivision')}),
-        ('Статус и уровень', {'fields': ('level', 'status', 'category')}),
+        ('Статус и уровень', {'fields': ('level', 'status', 'is_called_to_hr', 'category')}),
         ('Адреса', {'fields': ('address_actual', 'address_registered')}),
         ('Контакты', {'fields': ('phone_personal', 'telegram', 'phone_parent', 'fio_parent')}),
         ('Медицинские данные', {'fields': ('medical_info',)}),
@@ -191,10 +192,25 @@ class StudentAdmin(admin.ModelAdmin):
         return response
 
     def save_model(self, request, obj, form, change):
-            if not obj.pk:
-                obj.created_by = request.user
-            obj.updated_by = request.user
-            super().save_model(request, obj, form, change)
+        if not obj.pk:
+            obj.created_by = request.user
+        obj.updated_by = request.user
+
+        # Логика вызова к HR через поле is_called_to_hr
+        if change:
+            old_obj = Student.objects.get(pk=obj.pk)
+            if not old_obj.is_called_to_hr and obj.is_called_to_hr:
+                from apps.hr_calls.models import HrCall
+                # Проверяем, нет ли уже открытого вызова (problem_resolved=False)
+                if not HrCall.objects.filter(student=obj, person_type='student', problem_resolved=False).exists():
+                    HrCall.objects.create(
+                        person_type='student',
+                        student=obj,
+                        reason="",  # пустая причина
+                        created_by=obj.updated_by
+                    )
+
+        super().save_model(request, obj, form, change)
 
     def calculated_age(self, obj):
         if obj.birth_date:
@@ -234,10 +250,16 @@ class StudentAdmin(admin.ModelAdmin):
     level_badge.short_description = "Уровень"
 
     def status_badge(self, obj):
-        colors = {'active': 'bg-primary text-white', 'fired': 'bg-secondary text-white', 'called_hr': 'bg-info text-dark'}
+        colors = {'active': 'bg-primary text-white', 'fired': 'bg-secondary text-white'}
         color = colors.get(obj.status, 'bg-secondary text-white')
         return format_html('<span class="badge {}">{}</span>', color, obj.get_status_display())
     status_badge.short_description = "Статус"
+
+    def hr_status_badge(self, obj):
+        if obj.is_called_to_hr:
+            return format_html('<span class="badge bg-info text-dark">Вызван к HR</span>')
+        return format_html('<span class="badge bg-secondary text-white">Не вызван</span>')
+    hr_status_badge.short_description = "Вызов к HR"
 
 
 @admin.register(LevelHistory)
@@ -251,14 +273,7 @@ class LevelHistoryAdmin(admin.ModelAdmin):
         'comment_short'
     )
     list_filter = ('old_level', 'new_level', 'changed_by')
-    search_fields = (
-        'student__first_name',
-        'student__last_name',
-        'student__patronymic',
-        'changed_by__username',
-        'changed_by__first_name',
-        'changed_by__last_name'
-    )
+    search_fields = ('student__first_name', 'student__last_name', 'student__patronymic', 'changed_by__username', 'changed_by__first_name', 'changed_by__last_name')
     ordering = ('-changed_at',)
     readonly_fields = (
         'student',

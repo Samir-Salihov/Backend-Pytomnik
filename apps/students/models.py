@@ -20,14 +20,14 @@ LEVEL_CHOICES = [
 STATUS_CHOICES = [
     ('active', 'Активные'),
     ('fired', 'Уволенные'),
-    ('called_hr', 'Вызваны к HR'),
 ]
 
 CATEGORY_CHOICES = [
     ('college', 'Колледжисты'),
     ('patriot', 'Патриоты'),
-    ('alabuga_start', 'Алабуга Старт (СНГ)'),
-    ('alabuga_mulatki', 'Алабуга Старт (МИР)'),
+    ('alabuga_start_rf', 'Алабуга Старт (РФ)'),      # ← новая
+    ('alabuga_start_sng', 'Алабуга Старт (СНГ)'),
+    ('alabuga_mulatki', 'Алабуга Старт (МИР)'),     
 ]
 
 class StudentQuerySet(models.QuerySet):
@@ -79,6 +79,8 @@ class Student(models.Model):
 
     medical_info = models.TextField("Медицинские данные", blank=True, null=True)
 
+    is_called_to_hr = models.BooleanField("Вызван к HR", default=False, help_text="Установите True для вызова к HR")
+
     last_changed_field = models.CharField(
         "Последнее изменённое поле",
         max_length=200,
@@ -128,20 +130,6 @@ class Student(models.Model):
     def save(self, *args, **kwargs):
         if self.pk and kwargs.get('request'):
             self.updated_by = kwargs.pop('request').user
-
-        # Если статус меняется на 'called_hr' — создаём HrCall ТОЛЬКО ОДИН РАЗ
-        if self.pk:
-            old = Student.objects.only('status').get(pk=self.pk)
-            if old.status != 'called_hr' and self.status == 'called_hr':
-                from apps.hr_calls.models import HrCall
-                # Проверяем, нет ли уже вызова для этого кота
-                if not HrCall.objects.filter(student=self, person_type='student').exists():
-                    HrCall.objects.create(
-                        person_type='student',
-                        student=self,
-                        reason="",  # пустая причина
-                        created_by=self.updated_by
-                    )
 
         super().save(*args, **kwargs)
 

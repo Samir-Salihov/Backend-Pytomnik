@@ -2,7 +2,6 @@ from django.db.models.signals import pre_save, post_save
 from django.dispatch import receiver
 import logging
 
-
 from .models import Student, LevelHistory
 from apps.analytics.signals import update_analytics_snapshot
 
@@ -41,6 +40,7 @@ def sync_kanban_card(sender, instance, created, **kwargs):
     Безопасная синхронизация карточки без рекурсии:
     - Создаём/обновляем карточку только если нужно
     - Используем .update() или .get_or_create() без save() на Student
+    - Автоматически добавляем теги (labels) по категории
     """
     from apps.kanban.models import KanbanBoard, KanbanColumn, StudentKanbanCard
 
@@ -64,10 +64,10 @@ def sync_kanban_card(sender, instance, created, **kwargs):
         logger.info(f"Смена уровня кота {instance.full_name}: {previous_level} → {instance.level}")
 
     # 2. Определяем целевую доску по категории
-    if instance.category == 'alabuga_mulatki':
+    if instance.category in ['patriot', 'alabuga_start_rf', 'alabuga_start_sng', 'alabuga_mulatki']:
         target_board_id = "start"
     else:
-        target_board_id = "polytech"
+        target_board_id = "polytech"  # college и любые другие — на polytech
 
     try:
         target_board = KanbanBoard.objects.get(id=target_board_id)
@@ -95,13 +95,34 @@ def sync_kanban_card(sender, instance, created, **kwargs):
         logger.info(f"Удалена старая карточка кота {instance.full_name} при смене категории")
 
     # 5. Создаём или обновляем карточку — без вызова save на Student
-    StudentKanbanCard.objects.update_or_create(
+    card, card_created = StudentKanbanCard.objects.update_or_create(
         student=instance,
         defaults={
             'column': target_column,
             'position': 9999  
         }
     )
+
+    # 6. Автоматически добавляем теги (labels) по категории
+    category_tags = {
+        'patriot': ['Патриот'],
+        'alabuga_start_rf': ['Алабуга РФ'],
+        'alabuga_start_sng': ['Алабуга СНГ'],
+        'alabuga_mulatki': ['Алабуга МИР'],
+        'college': ['Колледжист'],
+    }
+
+    current_labels = card.labels or []  # если поле labels — JSONField(list)
+
+    if instance.category in category_tags:
+        for tag in category_tags[instance.category]:
+            if tag not in current_labels:
+                current_labels.append(tag)
+
+    # Сохраняем обновлённые теги (только если изменились или создана карточка)
+    if card_created or card.labels != current_labels:
+        card.labels = current_labels
+        card.save(update_fields=['labels'])
 
     # Очистка временных атрибутов
     for attr in ('_previous_level', '_previous_category', '_change_comment'):

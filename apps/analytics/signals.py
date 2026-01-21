@@ -19,26 +19,31 @@ def update_analytics_snapshot():
     now = timezone.now()
     current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-    total_students = Student.objects.count() or 1  # защита от 0
+    total_students = Student.objects.count() or 1
     active_students = Student.objects.filter(status='active').count()
     fired_students = Student.objects.filter(status='fired').count()
-    called_hr_students = Student.objects.filter(status='called_hr').count()
+
+    # Вызванные к HR — по открытым вызовам
+    called_hr_students = HrCall.objects.filter(person_type='student', problem_resolved=False).count()
 
     new_students_total = Student.objects.filter(created_at__gte=current_month_start).count()
     level_changes_total = LevelHistory.objects.filter(changed_at__gte=current_month_start).count()
 
-    # Распределение по уровням (без 'fired')
+    # Распределение по уровням — ТОЛЬКО активные коты
     level_dist = (
         Student.objects
+        .filter(status='active')
         .exclude(level='fired')
         .values('level')
         .annotate(count=Count('id'))
         .order_by('level')
     )
-    distribution_by_level = {
-        (item['level'] or 'Без уровня'): item['count']
-        for item in level_dist
-    }
+
+    # Сохраняем ТОЛЬКО количество (число!)
+    distribution_by_level = {}
+    for item in level_dist:
+        level = item['level'] or 'Без уровня'
+        distribution_by_level[level] = item['count']  # ← число, а не словарь!
 
     # По статусам
     status_dist = (

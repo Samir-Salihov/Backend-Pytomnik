@@ -2,32 +2,27 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from .models import AnalyticsSnapshot
-from apps.students.models import CATEGORY_CHOICES
+from apps.students.models import CATEGORY_CHOICES, Student
 
 
 class AnalyticsDashboardView(APIView):
-    """
-    Текущая аналитика (всегда актуальная через сигналы).
-    fired НЕ считается уровнем/цветом.
-    """
     permission_classes = [IsAuthenticated, IsAdminUser]
-
     def get(self, request):
         snapshot = AnalyticsSnapshot.get_or_create_snapshot()
-        total = snapshot.total_students or 1  # защита от деления на 0
-
-        # Уровни — без 'fired'
-        students_by_level = [
-            {
+        active_total = Student.objects.filter(status='active').exclude(level='fired').count() or 1
+        students_by_level = []
+        for level, count in snapshot.distribution_by_level.items():
+            if isinstance(count, dict):
+                count = count.get('count', 0)
+            count = int(count) if count else 0
+            percentage = round(count / active_total * 100, 1) if active_total > 0 else 0.0
+            students_by_level.append({
                 "level": level,
                 "display_name": level.capitalize(),
                 "count": count,
-                "percentage": round(count / total * 100, 1)
-            }
-            for level, count in snapshot.distribution_by_level.items()
-        ]
-
-        # Статусы
+                "percentage": percentage
+            })
+        total = snapshot.total_students or 1
         students_by_status = [
             {
                 "status": status,
@@ -37,8 +32,6 @@ class AnalyticsDashboardView(APIView):
             }
             for status, count in snapshot.distribution_by_status.items()
         ]
-
-        # Категории
         students_by_category = [
             {
                 "category": category,
@@ -48,8 +41,8 @@ class AnalyticsDashboardView(APIView):
             }
             for category, count in snapshot.distribution_by_category.items()
         ]
-
-        data = {
+        return Response({
+            "success": True,
             "total_students": snapshot.total_students,
             "active_students": snapshot.active_students,
             "fired_students": snapshot.fired_students,
@@ -60,33 +53,24 @@ class AnalyticsDashboardView(APIView):
             "students_by_status": students_by_status,
             "students_by_category": students_by_category,
             "updated_at": snapshot.updated_at,
-        }
-
-        return Response({
-            "success": True,
-            "data": data
         }, status=200)
-
 
 class LevelDistributionView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
-
     def get(self, request):
         snapshot = AnalyticsSnapshot.get_or_create_snapshot()
-        total = snapshot.total_students or 1
-
+        active_total = Student.objects.filter(status='active').exclude(level='fired').count() or 1
         levels = [
             {
                 "level": level,
                 "display_name": level.capitalize(),
-                "count": count,
-                "percentage": round(count / total * 100, 1)
+                "count": int(count) if not isinstance(count, dict) else count.get('count', 0),
+                "percentage": round((int(count) if not isinstance(count, dict) else count.get('count', 0)) / active_total * 100, 1)
             }
             for level, count in snapshot.distribution_by_level.items()
         ]
-
         return Response({
             "success": True,
             "levels": levels,
-            "total": snapshot.total_students
+            "total_active": active_total
         }, status=200)
