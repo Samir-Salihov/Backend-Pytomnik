@@ -19,8 +19,8 @@ class HrFileInline(admin.TabularInline):
 @admin.register(HrCall)
 class HrCallAdmin(admin.ModelAdmin):
     list_display = (
-        'get_person_name', 'person_type', 'reason_short', 'solution_short', 
-        'visit_datetime', 'problem_resolved', 'created_by', 'created_at'
+        'id', 'get_person_name', 'person_type', 'reason_short', 'solution_short', 
+        'visit_datetime', 'problem_resolved', 'created_by', 'created_at', 
     )
     list_filter = ('person_type', 'visit_datetime')
     search_fields = ('full_name', 'student__full_name', 'reason')

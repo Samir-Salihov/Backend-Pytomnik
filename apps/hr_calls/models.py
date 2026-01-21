@@ -16,7 +16,7 @@ class HrCall(models.Model):
         "Тип человека",
         max_length=20,
         choices=PERSON_TYPE_CHOICES,
-        help_text="Кот или обычный колледжист"
+        help_text="Кот или обычный колледжист",
     )
     student = models.ForeignKey(
         Student,

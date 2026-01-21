@@ -35,13 +35,30 @@ class HrCallDetailView(APIView):
         }, status=status.HTTP_200_OK)
 
     def put(self, request, pk):
+        """Полное обновление (PUT)"""
+        call = get_object_or_404(HrCall, pk=pk)
+        serializer = HrCallUpdateSerializer(call, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "success": True,
+                "message": "Вызов полностью обновлён",
+                "call": HrCallSerializer(call).data
+            }, status=status.HTTP_200_OK)
+        return Response({
+            "success": False,
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    def patch(self, request, pk):
+        """Частичное обновление (PATCH) — можно менять только нужные поля"""
         call = get_object_or_404(HrCall, pk=pk)
         serializer = HrCallUpdateSerializer(call, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
             return Response({
                 "success": True,
-                "message": "Вызов обновлён",
+                "message": "Вызов частично обновлён",
                 "call": HrCallSerializer(call).data
             }, status=status.HTTP_200_OK)
         return Response({
@@ -108,17 +125,36 @@ class HrCommentCreateView(APIView):
         }, status=status.HTTP_400_BAD_REQUEST)
 
 
+
+
+
 class HrCommentDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def put(self, request, call_pk, pk):
+        comment = get_object_or_404(HrComment, pk=pk, hr_call_id=call_pk)
+        serializer = HrCommentUpdateSerializer(comment, data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "success": True,
+                "message": "Комментарий полностью обновлён",
+                "comment": serializer.data
+            }, status=status.HTTP_200_OK)
+        return Response({
+            "success": False,
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    def patch(self, request, call_pk, pk):
+        """Добавлен PATCH для комментариев (частичное обновление)"""
         comment = get_object_or_404(HrComment, pk=pk, hr_call_id=call_pk)
         serializer = HrCommentUpdateSerializer(comment, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
             return Response({
                 "success": True,
-                "message": "Комментарий обновлён",
+                "message": "Комментарий частично обновлён",
                 "comment": serializer.data
             }, status=status.HTTP_200_OK)
         return Response({

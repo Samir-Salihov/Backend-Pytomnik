@@ -36,7 +36,7 @@ class HrCallSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'person_type', 'student', 'full_name', 'reason', 'solution',
             'visit_datetime', 'created_by_username', 'created_at', 'updated_at',
-            'comments', 'files'
+            'comments', 'files', 'problem_resolved'
         ]
         read_only_fields = ['id', 'created_by_username', 'created_at', 'updated_at', 'comments', 'files']
 
@@ -67,12 +67,34 @@ class HrCallCreateSerializer(serializers.ModelSerializer):
 class HrCallUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = HrCall
-        fields = ['reason', 'solution', 'visit_datetime']
+        fields = [
+            'reason',           # Причина вызова
+            'solution',         # Решение
+            'visit_datetime',   # Дата и время посещения
+            'problem_resolved'  # Проблема решена (галочка)
+        ]
+        extra_kwargs = {
+            'reason': {'required': False, 'allow_blank': True},
+            'solution': {'required': False, 'allow_blank': True},
+            'visit_datetime': {'required': False, 'allow_null': True},
+            'problem_resolved': {'required': False}
+        }
 
     def update(self, instance, validated_data):
+        # Обновляем поля, которые пришли в запросе
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
+
+        # Если проблема решена (problem_resolved = True) и это вызов для студента
+        if validated_data.get('problem_resolved') is True and instance.student:
+            # Возвращаем статус студента на 'active'
+            instance.student.status = 'active'
+            instance.student.is_called_to_hr = False  # если есть такое поле
+            instance.student.save(update_fields=['status', 'is_called_to_hr'])
+
+        # Сохраняем изменения в вызове
         instance.save()
+
         return instance
 
 
