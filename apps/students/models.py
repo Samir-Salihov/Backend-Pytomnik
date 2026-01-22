@@ -30,6 +30,8 @@ CATEGORY_CHOICES = [
     ('alabuga_mulatki', 'Алабуга Старт (МИР)'),     
 ]
 
+
+
 class StudentQuerySet(models.QuerySet):
     def active(self):
         return self.filter(status='active')
@@ -160,6 +162,8 @@ class Comment(models.Model):
     is_edited = models.BooleanField(default=False)
 
     class Meta:
+        verbose_name = "Комментарий к студенту"
+        verbose_name_plural = "Комментарии к студентам"
         ordering = ['-created_at']
 
     def __str__(self):
@@ -170,7 +174,13 @@ class MedicalFile(models.Model):
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="medical_files")
     file = models.FileField("Медицинский файл", upload_to='students/medical_files/')
     description = models.CharField("Описание", max_length=255, blank=True)
-    uploaded_at = models.DateTimeField(auto_now_add=True)
+    uploaded_at = models.DateTimeField("Загружен", auto_now_add=True)
+    uploaded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        verbose_name="Загрузил"
+    )
 
     class Meta:
         verbose_name = "Медицинский файл"

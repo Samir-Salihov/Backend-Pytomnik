@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.urls import path, include
-from apps.hr_calls.views import HrCallCreateView, HrCallDetailView, HrCallListView, HrCommentCreateView, HrCommentDetailView, HrCommentListView, HrFileCreateView, HrFileDetailView, HrFileListView
+from apps.hr_calls.views import HrCallCreateView, HrCallDetailView, HrCallListView, HrCommentCreateView, HrCommentDetailView, HrCommentListView, HrFileCreateView, HrFileDeleteView, HrFileListView
 from apps.users.views import (
     CustomLoginView,
     RegisterView,
@@ -13,9 +13,9 @@ from apps.users.views import (
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 from apps.students.views import (
-    CommentDeleteView, StudentListView, StudentDetailView, StudentCreateView,
+    CommentDeleteView, MedicalFileUploadView, StudentListView, StudentDetailView, StudentCreateView,
     StudentUpdateView, StudentDeleteView, StudentChangeLevelView,
-    StudentLevelHistoryView, StudentCommentsView, CommentUpdateView, 
+    StudentLevelHistoryView, StudentCommentsView, CommentUpdateView, MedicalFileListView, MedicalFileDeleteView 
 )
 from apps.kanban.views import KanbanBoardDetailView, MoveCardView, KanbanBoardCreateView
 
@@ -78,6 +78,9 @@ urlpatterns = [
     # Файлы
     path('hr-calls/<int:pk>/files/', HrFileListView.as_view(), name='hr_file_list'),
     path('hr-calls/<int:pk>/files/create/', HrFileCreateView.as_view(), name='hr_file_create'),
-    path('hr-calls/<int:call_pk>/files/<int:pk>/', HrFileDetailView.as_view(), name='hr_file_detail'),
+    path('hr-calls/<int:call_pk>/files/<int:pk>/', HrFileDeleteView.as_view(), name='hr_file_detail'),
 
+    path('students/<int:student_pk>/medical-files/', MedicalFileListView.as_view(), name='medical-file-list'),
+    path('students/<int:student_pk>/medical-files/<int:pk>/delete/', MedicalFileDeleteView.as_view(), name='medical-file-delete'),
+    path('students/<int:student_pk>/medical-files/create/', MedicalFileUploadView.as_view(), name='medical-file-detail'),
 ]

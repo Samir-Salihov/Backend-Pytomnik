@@ -5,8 +5,10 @@ from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 
-from .models import Student, LevelHistory, Comment, LEVEL_CHOICES  
+from .models import MedicalFile, Student, LevelHistory, Comment, LEVEL_CHOICES  
 from .serializers import (
+    MedicalFileCreateSerializer,
+    MedicalFileSerializer,
     StudentDetailSerializer,
     StudentSerializer,
     StudentCreateSerializer,
@@ -236,4 +238,60 @@ class CommentDeleteView(APIView):
         return Response({
             "success": True,
             "message": f"Комментарий «{comment_text}» успешно удалён"
+        }, status=status.HTTP_200_OK)
+
+
+class MedicalFileUploadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        student = get_object_or_404(Student, pk=pk)
+        serializer = MedicalFileCreateSerializer(
+            data=request.data,
+            context={'request': request, 'student': student}
+        )
+        if serializer.is_valid():
+            medical_file = serializer.save()
+            return Response({
+                "success": True,
+                "message": "Медицинский файл загружен",
+                "file": {
+                    "id": medical_file.id,
+                    "file_url": medical_file.file.url,
+                    "description": medical_file.description,
+                    "uploaded_at": medical_file.uploaded_at,
+                    "uploaded_by": medical_file.uploaded_by.username
+                }
+            }, status=status.HTTP_201_CREATED)
+
+        return Response({
+            "success": False,
+            "message": "Ошибка при загрузке файла",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class MedicalFileDeleteView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def delete(self, request, pk):
+        medical_file = get_object_or_404(MedicalFile, pk=pk)
+        file_description = medical_file.description or medical_file.file.name
+        medical_file.delete()
+        return Response({
+            "success": True,
+            "message": f"Медицинский файл «{file_description}» успешно удалён"
+        }, status=status.HTTP_200_OK)
+    
+class MedicalFileListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        student = get_object_or_404(Student, pk=pk)
+        medical_files = student.medical_files.all().order_by('-uploaded_at')
+        serializer = MedicalFileSerializer(medical_files, many=True)
+        return Response({
+            "success": True,
+            "student_id": student.id,
+            "medical_files": serializer.data
         }, status=status.HTTP_200_OK)

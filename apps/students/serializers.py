@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
 from apps.kanban.models import StudentKanbanCard
-from .models import Student, LevelHistory, Comment
+from .models import Student, LevelHistory, Comment, MedicalFile
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -324,3 +324,24 @@ class StudentDetailSerializer(serializers.ModelSerializer):
             }
         except Exception:
             return None
+
+class MedicalFileSerializer(serializers.ModelSerializer):
+    file_url = serializers.FileField(source='file', read_only=True)
+    uploaded_by_username = serializers.CharField(source='uploaded_by.username', read_only=True)
+
+    class Meta:
+        model = MedicalFile
+        fields = ['id', 'file_url', 'description', 'uploaded_at', 'uploaded_by_username']
+        read_only_fields = fields
+
+class MedicalFileCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MedicalFile
+        fields = ['file', 'description']
+
+    def create(self, validated_data):
+        request = self.context.get('request')
+        student = self.context.get('student')
+        validated_data['uploaded_by'] = request.user
+        validated_data['student'] = student
+        return super().create(validated_data)

@@ -203,7 +203,7 @@ class HrFileCreateView(APIView):
         }, status=status.HTTP_400_BAD_REQUEST)
 
 
-class HrFileDetailView(APIView):
+class HrFileDeleteView(APIView):
     permission_classes = [IsAuthenticated]
 
     def delete(self, request, call_pk, pk):
