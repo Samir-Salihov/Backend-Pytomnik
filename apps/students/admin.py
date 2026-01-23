@@ -328,3 +328,21 @@ class CommentAdmin(admin.ModelAdmin):
     def text_preview(self, obj):
         return obj.text[:50] + '...' if len(obj.text) > 50 else obj.text
     text_preview.short_description = "Комментарий"
+
+@admin.register(MedicalFile)
+class MedicalFileAdmin(admin.ModelAdmin):
+    list_display = ('student', 'description', 'file_link', 'uploaded_by', 'uploaded_at')
+    list_filter = ('uploaded_by',)
+    search_fields = ('description', 'student__first_name', 'student__last_name', 'uploaded_by__username')
+    ordering = ('-uploaded_at',)
+
+    def file_link(self, obj):
+        if obj.file:
+            return format_html(
+                '<a href="{}" target="_blank">Скачать</a>',
+                obj.file.url
+            )
+        return "Нет файла"
+    file_link.short_description = "Файл"
+    file_link.admin_order_field = 'file'
+    

@@ -73,6 +73,6 @@ urlpatterns = [
     path('hr-calls/<int:call_pk>/files/<int:pk>/', HrFileDeleteView.as_view(), name='hr_file_detail'),
 
     path('students/<int:student_pk>/medical-files/', MedicalFileListView.as_view(), name='medical-file-list'),
+    path('students/<int:student_pk>/medical-files/create/', MedicalFileUploadView.as_view(), name='medical-file-create'),
     path('students/<int:student_pk>/medical-files/<int:pk>/delete/', MedicalFileDeleteView.as_view(), name='medical-file-delete'),
-    path('students/<int:student_pk>/medical-files/create/', MedicalFileUploadView.as_view(), name='medical-file-detail'),
 ]

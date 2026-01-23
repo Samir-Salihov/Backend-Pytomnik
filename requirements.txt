@@ -1,4 +1,5 @@
 amqp==5.3.1
+anyio==4.12.1
 asgiref==3.11.0
 attrs==25.3.0
 autopep8==2.3.2
@@ -26,6 +27,7 @@ django-axes==7.0.2
 django-channels==0.7.0
 django-cors-headers==4.9.0
 django-debug-toolbar==6.1.0
+django-elasticsearch-dsl==9.0
 django-eventstream==5.3.2
 django-filter==25.1
 django-grip==3.5.2
@@ -39,6 +41,8 @@ dotenv==0.9.9
 dpd_components==0.2.0
 drf-spectacular==0.27.1
 dulwich==0.22.7
+elastic-transport==9.2.1
+elasticsearch==9.2.1
 envparse==0.2.0
 et_xmlfile==2.0.0
 fastjsonschema==2.21.1
@@ -100,6 +104,7 @@ rpds-py==0.24.0
 setuptools==80.9.0
 shellingham==1.5.4
 six==1.17.0
+sniffio==1.3.1
 sqlparse==0.5.3
 tomlkit==0.13.2
 trove-classifiers==2025.2.18.16
