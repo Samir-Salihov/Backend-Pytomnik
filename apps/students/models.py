@@ -30,8 +30,8 @@ CATEGORY_CHOICES = [
     ('alabuga_mulatki', 'Алабуга Старт (МИР)'),
 ]
 
-YEARS_CHOICES = [(y, y) for y in range(2023, 2027)]
-MONTHS_CHOICES = [(m, m) for m in range(1, 13)]
+YEARS_CHOICES = [(y, str(y)) for y in range(2023, 2027)]
+MONTHS_CHOICES = [(m, str(m)) for m in range(1, 13)]
 
 class StudentQuerySet(models.QuerySet):
     def active(self):
@@ -84,9 +84,9 @@ class Student(models.Model):
 
     is_called_to_hr = models.BooleanField("Вызван к HR", default=False, help_text="Установите True для вызова к HR")
 
-    fired_date = models.DateField("Дата увольнения", null=True, blank=True)  # ← новое поле
+    fired_date = models.DateField("Дата увольнения", null=True, blank=True)  # опционально
 
-    last_changed_field = models.CharField(
+    last_changed_field = models.CharField (
         "Последнее изменённое поле",
         max_length=200,
         blank=True,
@@ -132,9 +132,17 @@ class Student(models.Model):
             if age is not None and (age < 14 or age > 30):
                 raise ValidationError("Возраст должен быть от 14 до 30 лет")
 
+        # НОВАЯ ВАЛИДАЦИЯ: дата увольнения только если уровень 'fired'
+        if self.fired_date and self.level != 'fired':
+            raise ValidationError("Вы не можете указать дату увольнения, если кот не уволен")
+
     def save(self, *args, **kwargs):
         if self.pk and kwargs.get('request'):
             self.updated_by = kwargs.pop('request').user
+        if self.level == 'fired':
+            self.status = 'fired'
+        else:
+            self.status = 'active'
 
         super().save(*args, **kwargs)
 
@@ -161,7 +169,7 @@ class LevelByMonth(models.Model):
     year = models.IntegerField(choices=YEARS_CHOICES)
     month = models.IntegerField(choices=MONTHS_CHOICES)
     level = models.CharField(max_length=10, choices=LEVEL_CHOICES, null=True, blank=True)
-    fired_date = models.DateField(null=True, blank=True)  # только для fired
+    fired_date = models.DateField(null=True, blank=True)
     last_changed_at = models.DateTimeField(null=True, blank=True)
     change_count = models.PositiveSmallIntegerField(default=0)
 
@@ -171,6 +179,9 @@ class LevelByMonth(models.Model):
 
     def __str__(self):
         return f"{self.student} — {self.year}-{self.month:02d}: {self.level or '—'}"
+
+    def get_level_display(self):
+        return dict(LEVEL_CHOICES).get(self.level, self.level or '—')
 
 
 class Comment(models.Model):

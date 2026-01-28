@@ -2,7 +2,7 @@ from rest_framework import serializers
 from apps.kanban.models import StudentKanbanCard
 from .models import LevelByMonth, Student, LevelHistory, Comment, MedicalFile
 from django.contrib.auth import get_user_model
-from django.utils import timezone  # ← правильный импорт
+from django.utils import timezone
 
 User = get_user_model()
 
@@ -84,18 +84,11 @@ class StudentCreateSerializer(serializers.ModelSerializer):
             'fio_parent': {'required': True},
         }
 
-    def validate(self, attrs):
-        if attrs.get('phone_personal') == attrs.get('phone_parent'):
-            raise serializers.ValidationError({
-                "phone_parent": "Телефон родителя не может совпадать с личным телефоном."
-            })
-        return attrs
-
     def create(self, validated_data):
         request = self.context.get('request')
         student = Student.objects.create(
             **validated_data,
-            created_by=request.user,
+            created_by=request.user,    
             updated_by=request.user
         )
         return student
@@ -107,14 +100,18 @@ class StudentUpdateSerializer(serializers.ModelSerializer):
         fields = [
             'first_name', 'last_name', 'patronymic', 'direction', 'subdivision',
             'age', 'level', 'status', 'category', 'address_actual', 'address_registered',
-            'phone_personal', 'telegram', 'phone_parent', 'medical_info', 'is_called_to_hr'
+            'phone_personal', 'telegram', 'phone_parent', 'medical_info', 'is_called_to_hr',
+            'fired_date'  # ← добавлено: теперь дата увольнения редактируемая через API
         ]
 
     def validate(self, attrs):
-        if attrs.get('phone_personal') == attrs.get('phone_parent'):
-            raise serializers.ValidationError({
-                "phone_parent": "Телефон родителя не может совпадать с личным телефоном."
-            })
+        level = attrs.get('level', self.instance.level) if self.instance else attrs.get('level')
+        fired_date = attrs.get('fired_date')
+
+        # Запрет: дата увольнения только если уровень 'fired'
+        if fired_date and level != 'fired':
+            raise serializers.ValidationError("Дата увольнения может быть указана только для уровня 'Уволен'")
+
         return attrs
 
     def update(self, instance, validated_data):
@@ -260,8 +257,10 @@ class LevelByMonthUpdateSerializer(serializers.ModelSerializer):
         if year > current_year or (year == current_year and month > current_month):
             raise serializers.ValidationError("Нельзя редактировать уровень в будущем месяце")
 
-        if level == 'fired' and not fired_date:
-            raise serializers.ValidationError("Для уровня 'Уволен' обязательна дата увольнения")
+        # Дата увольнения опциональна для 'fired'
+        # Но если дата указана — уровень должен быть 'fired'
+        if fired_date and level != 'fired':
+            raise serializers.ValidationError("Дата увольнения может быть указана только для уровня 'Уволен'")
 
         return attrs
 
@@ -273,7 +272,7 @@ class LevelByMonthUpdateSerializer(serializers.ModelSerializer):
         instance.level = new_level
         instance.fired_date = fired_date if new_level == 'fired' else None
         instance.last_changed_at = timezone.now()
-        instance.change_count += 1
+        instance.change_count = (instance.change_count or 0) + 1
         instance.save()
 
         LevelHistory.objects.create(
@@ -308,7 +307,8 @@ class StudentDetailSerializer(serializers.ModelSerializer):
     comments = serializers.SerializerMethodField(read_only=True)
     medical_files = serializers.SerializerMethodField(read_only=True)
     kanban_card = serializers.SerializerMethodField(read_only=True)
-    level_history_calendar = serializers.SerializerMethodField(read_only=True)  # ← добавлено
+    level_history_calendar = serializers.SerializerMethodField(read_only=True)
+    fired_date_display = serializers.SerializerMethodField(read_only=True)  # отображение даты увольнения
 
     class Meta:
         model = Student
@@ -322,8 +322,14 @@ class StudentDetailSerializer(serializers.ModelSerializer):
             'medical_info', 'photo', 'photo_url', 'medical_files',
             'created_at', 'updated_at', 'created_by_username', 'updated_by_username',
             'last_changed_field',
-            'level_history', 'comments', 'kanban_card', 'level_history_calendar'  # ← добавлено в fields
+            'level_history', 'comments', 'kanban_card', 'level_history_calendar',
+            'fired_date', 'fired_date_display'
         ]
+
+    def get_fired_date_display(self, obj):
+        if obj.fired_date:
+            return obj.fired_date.strftime('%d.%m.%Y')
+        return "—"
 
     def get_full_name(self, obj):
         return obj.full_name

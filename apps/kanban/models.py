@@ -87,28 +87,26 @@ class StudentKanbanCard(models.Model):
 
     def clean(self):
         board_id = self.column.board.id
-        from apps.students.models import Student
         category = self.student.category
 
-        if category in ['alabuga_mulatki', 'alabuga_start_sng', 'patriot', "alabuga_start_rf"] and board_id != 'start':
+        if category in ['alabuga_mulatki', 'alabuga_start_sng', 'patriot', 'alabuga_start_rf'] and board_id != 'start':
             raise ValidationError("Студент категории Алабуга Старт и Патриоты не может быть на доске Политеха")
 
         if category in ['college'] and board_id != 'polytech':
             raise ValidationError("Студент категории Политех не может быть на доске Алабуга Старт")
-        
-        if self.column.level == 'fired' and self.student.fired_data != 'fired':
-            raise ValidationError("Для перемещения в колонку 'Уволен' необходимо указать дату увольнения у кота")
+
+        # Убрана обязательность даты увольнения при перемещении в "Уволен"
+        # Дата теперь опциональна
 
     def save(self, *args, **kwargs):
         self.clean()
 
-        # Обновляем статус и уровень студента через update() — безопасно, без рекурсии
         if self.column.level == 'fired':
             status = 'fired'
-            level = 'fired'  # уровень 'fired' — серый цвет
+            level = 'fired'
         else:
             status = 'active'
-            level = self.column.level  # уровень колонки — цвет появляется
+            level = self.column.level
 
         from apps.students.models import Student
         Student.objects.filter(id=self.student.id).update(status=status, level=level)

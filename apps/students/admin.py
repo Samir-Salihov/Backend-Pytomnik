@@ -228,19 +228,6 @@ class StudentAdmin(admin.ModelAdmin):
             obj.created_by = request.user
         obj.updated_by = request.user
 
-        # Логика вызова к HR через поле is_called_to_hr
-        if change:
-            old_obj = Student.objects.get(pk=obj.pk)
-            if not old_obj.is_called_to_hr and obj.is_called_to_hr:
-                from apps.hr_calls.models import HrCall
-                if not HrCall.objects.filter(student=obj, person_type='student', problem_resolved=False).exists():
-                    HrCall.objects.create(
-                        person_type='student',
-                        student=obj,
-                        reason="",
-                        created_by=obj.updated_by
-                    )
-
         super().save_model(request, obj, form, change)
 
     def level_calendar_preview(self, obj):

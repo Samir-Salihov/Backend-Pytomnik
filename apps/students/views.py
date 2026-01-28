@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework import status
 from django.shortcuts import get_object_or_404
+from django.db import transaction
 
 from .models import LevelByMonth, MedicalFile, Student, LevelHistory, Comment, LEVEL_CHOICES  
 from .serializers import (
@@ -71,6 +72,7 @@ class StudentCreateView(APIView):
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
 
+
 class StudentUpdateView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -90,6 +92,7 @@ class StudentUpdateView(APIView):
         )
         if serializer.is_valid():
             updated_student = serializer.save()
+
             return Response({
                 "success": True,
                 "message": "Студент успешно обновлён",
@@ -98,7 +101,8 @@ class StudentUpdateView(APIView):
                     "full_name": updated_student.full_name,
                     "level": updated_student.get_level_display(),
                     "last_changed_field": updated_student.last_changed_field,
-                    "updated_by": request.user.username
+                    "updated_by": request.user.username,
+                    "is_called_to_hr": updated_student.is_called_to_hr
                 }
             }, status=status.HTTP_200_OK)
 
@@ -131,16 +135,18 @@ class StudentChangeLevelView(APIView):
         comment = request.data.get('comment', '').strip()
 
         if new_level not in dict(LEVEL_CHOICES):
-            return Response({
-                "success": False,
-                "message": "Недопустимый уровень"
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"success": False, "message": "Недопустимый уровень"}, status=400)
+
+        # Убрана обязательность fired_date для 'fired' — дата опциональна
 
         old_level = student.level
         student.level = new_level
         student.updated_by = request.user
-        student._change_comment = comment  
-        student.save()  
+        student._change_comment = comment
+
+        student.status = 'fired' if new_level == 'fired' else 'active'
+
+        student.save()
 
         return Response({
             "success": True,
@@ -149,9 +155,11 @@ class StudentChangeLevelView(APIView):
             "full_name": student.full_name,
             "old_level": old_level,
             "new_level": new_level,
+            "status": student.status,  
             "changed_by": request.user.username,
             "comment": comment
-        }, status=status.HTTP_200_OK)
+        }, status=200)
+
 
 class StudentLevelHistoryView(APIView):
     permission_classes = [IsAuthenticated]
@@ -228,6 +236,7 @@ class CommentUpdateView(APIView):
             "message": "Ошибка при обновлении",
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
+
 
 class CommentDeleteView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
@@ -350,13 +359,14 @@ class StudentLevelByMonthUpdateView(APIView):
     def delete(self, request, pk, year, month):
         student = get_object_or_404(Student, pk=pk)
         lbm = get_object_or_404(LevelByMonth, student=student, year=year, month=month)
+        old_level = lbm.level
         lbm.level = None
         lbm.fired_date = None
         lbm.change_count = max(0, lbm.change_count - 1)
         lbm.save()
         LevelHistory.objects.create(
             student=student,
-            old_level=lbm.level,
+            old_level=old_level,
             new_level=None,
             changed_by=request.user,
             comment="Удаление уровня через календарь"
