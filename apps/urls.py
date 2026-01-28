@@ -13,7 +13,7 @@ from apps.users.views import (
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 from apps.students.views import (
-    CommentDeleteView, MedicalFileUploadView, StudentListView, StudentDetailView, StudentCreateView,
+    CommentDeleteView, MedicalFileUploadView, StudentLevelByMonthUpdateView, StudentLevelCalendarView, StudentLevelMonthDetailView, StudentListView, StudentDetailView, StudentCreateView,
     StudentUpdateView, StudentDeleteView, StudentChangeLevelView,
     StudentLevelHistoryView, StudentCommentsView, CommentUpdateView, MedicalFileListView, MedicalFileDeleteView 
 )
@@ -75,4 +75,8 @@ urlpatterns = [
     path('students/<int:student_pk>/medical-files/', MedicalFileListView.as_view(), name='medical-file-list'),
     path('students/<int:student_pk>/medical-files/create/', MedicalFileUploadView.as_view(), name='medical-file-create'),
     path('students/<int:student_pk>/medical-files/<int:pk>/delete/', MedicalFileDeleteView.as_view(), name='medical-file-delete'),
+
+    path('students/<int:pk>/level-calendar/', StudentLevelCalendarView.as_view(), name='level-calendar'),
+    path('students/<int:pk>/level-month/<int:year>/<int:month>/', StudentLevelMonthDetailView.as_view(), name='level-month-detail'),
+    path('students/<int:pk>/level-month/<int:year>/<int:month>/update/', StudentLevelByMonthUpdateView.as_view(), name='level-month-update'),
 ]

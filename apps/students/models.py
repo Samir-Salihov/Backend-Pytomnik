@@ -25,12 +25,13 @@ STATUS_CHOICES = [
 CATEGORY_CHOICES = [
     ('college', 'Колледжисты'),
     ('patriot', 'Патриоты'),
-    ('alabuga_start_rf', 'Алабуга Старт (РФ)'),      # ← новая
+    ('alabuga_start_rf', 'Алабуга Старт (РФ)'),
     ('alabuga_start_sng', 'Алабуга Старт (СНГ)'),
-    ('alabuga_mulatki', 'Алабуга Старт (МИР)'),     
+    ('alabuga_mulatki', 'Алабуга Старт (МИР)'),
 ]
 
-
+YEARS_CHOICES = [(y, y) for y in range(2023, 2027)]
+MONTHS_CHOICES = [(m, m) for m in range(1, 13)]
 
 class StudentQuerySet(models.QuerySet):
     def active(self):
@@ -82,6 +83,8 @@ class Student(models.Model):
     medical_info = models.TextField("Медицинские данные", blank=True, null=True)
 
     is_called_to_hr = models.BooleanField("Вызван к HR", default=False, help_text="Установите True для вызова к HR")
+
+    fired_date = models.DateField("Дата увольнения", null=True, blank=True)  # ← новое поле
 
     last_changed_field = models.CharField(
         "Последнее изменённое поле",
@@ -151,6 +154,23 @@ class LevelHistory(models.Model):
 
     def __str__(self):
         return f"{self.student} — {self.get_old_level_display()} → {self.get_new_level_display()}"
+
+
+class LevelByMonth(models.Model):
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="level_by_month")
+    year = models.IntegerField(choices=YEARS_CHOICES)
+    month = models.IntegerField(choices=MONTHS_CHOICES)
+    level = models.CharField(max_length=10, choices=LEVEL_CHOICES, null=True, blank=True)
+    fired_date = models.DateField(null=True, blank=True)  # только для fired
+    last_changed_at = models.DateTimeField(null=True, blank=True)
+    change_count = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        unique_together = ('student', 'year', 'month')
+        ordering = ['year', 'month']
+
+    def __str__(self):
+        return f"{self.student} — {self.year}-{self.month:02d}: {self.level or '—'}"
 
 
 class Comment(models.Model):

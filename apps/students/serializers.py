@@ -1,8 +1,8 @@
 from rest_framework import serializers
-
 from apps.kanban.models import StudentKanbanCard
-from .models import Student, LevelHistory, Comment, MedicalFile
+from .models import LevelByMonth, Student, LevelHistory, Comment, MedicalFile
 from django.contrib.auth import get_user_model
+from django.utils import timezone  # ← правильный импорт
 
 User = get_user_model()
 
@@ -57,7 +57,7 @@ class StudentSerializer(serializers.ModelSerializer):
 
 
 class StudentCreateSerializer(serializers.ModelSerializer):
-    photo = serializers.ImageField(required=False, allow_null=True)  # ← можно загружать
+    photo = serializers.ImageField(required=False, allow_null=True)
 
     class Meta:
         model = Student
@@ -162,7 +162,7 @@ class LevelHistorySerializer(serializers.ModelSerializer):
             'new_level_display',
             'changed_by',
             'changed_by_username',
-            'changed_by_full_name',  # ← добавлено: ФИО вместо username
+            'changed_by_full_name',
             'changed_at',
             'comment'
         ]
@@ -233,11 +233,69 @@ class CommentUpdateSerializer(serializers.ModelSerializer):
         return instance
 
 
+class LevelByMonthSerializer(serializers.ModelSerializer):
+    level_display = serializers.CharField(source='get_level_display', read_only=True)
+    month_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LevelByMonth
+        fields = ['year', 'month', 'month_name', 'level', 'level_display', 'fired_date', 'change_count']
+
+    def get_month_name(self, obj):
+        return timezone.datetime(2000, obj.month, 1).strftime('%B')
+
+
+class LevelByMonthUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LevelByMonth
+        fields = ['level', 'fired_date']
+
+    def validate(self, attrs):
+        level = attrs.get('level')
+        fired_date = attrs.get('fired_date')
+        year = self.instance.year
+        month = self.instance.month
+        current_year, current_month = timezone.now().year, timezone.now().month
+
+        if year > current_year or (year == current_year and month > current_month):
+            raise serializers.ValidationError("Нельзя редактировать уровень в будущем месяце")
+
+        if level == 'fired' and not fired_date:
+            raise serializers.ValidationError("Для уровня 'Уволен' обязательна дата увольнения")
+
+        return attrs
+
+    def update(self, instance, validated_data):
+        old_level = instance.level
+        new_level = validated_data.get('level', old_level)
+        fired_date = validated_data.get('fired_date')
+
+        instance.level = new_level
+        instance.fired_date = fired_date if new_level == 'fired' else None
+        instance.last_changed_at = timezone.now()
+        instance.change_count += 1
+        instance.save()
+
+        LevelHistory.objects.create(
+            student=instance.student,
+            old_level=old_level,
+            new_level=new_level,
+            changed_by=self.context['request'].user,
+            comment="Редактирование через календарь"
+        )
+
+        if new_level == 'fired':
+            from apps.students.signals import propagate_fired
+            propagate_fired(instance.student, instance.year, instance.month, fired_date)
+
+        if old_level == 'fired' and new_level != 'fired':
+            from apps.students.signals import clear_future_fired
+            clear_future_fired(instance.student, instance.year, instance.month)
+
+        return instance
+
+
 class StudentDetailSerializer(serializers.ModelSerializer):
-    """
-    Детальный сериализатор для одного студента — возвращает ВСЁ, что есть в модели.
-    Используется в StudentDetailView для API /students/<pk>/
-    """
     full_name = serializers.SerializerMethodField(read_only=True)
     age = serializers.SerializerMethodField(read_only=True)
     level_display = serializers.CharField(source='get_level_display', read_only=True)
@@ -250,32 +308,23 @@ class StudentDetailSerializer(serializers.ModelSerializer):
     comments = serializers.SerializerMethodField(read_only=True)
     medical_files = serializers.SerializerMethodField(read_only=True)
     kanban_card = serializers.SerializerMethodField(read_only=True)
+    level_history_calendar = serializers.SerializerMethodField(read_only=True)  # ← добавлено
 
     class Meta:
         model = Student
         fields = [
-            # Основные данные
             'id', 'first_name', 'last_name', 'patronymic', 'full_name',
             'direction', 'subdivision', 'birth_date', 'age',
             'level', 'level_display', 'status', 'status_display',
             'category', 'category_display', 'is_called_to_hr',
-            
-            # Контакты и адреса
             'address_actual', 'address_registered',
             'phone_personal', 'telegram', 'phone_parent', 'fio_parent',
-            
-            # Медицина и фото
             'medical_info', 'photo', 'photo_url', 'medical_files',
-            
-            # Системные поля
             'created_at', 'updated_at', 'created_by_username', 'updated_by_username',
             'last_changed_field',
-            
-            # Связи и история
-            'level_history', 'comments', 'kanban_card',
+            'level_history', 'comments', 'kanban_card', 'level_history_calendar'  # ← добавлено в fields
         ]
 
-    # Вычисляемые поля
     def get_full_name(self, obj):
         return obj.full_name
 
@@ -285,14 +334,14 @@ class StudentDetailSerializer(serializers.ModelSerializer):
     def get_photo_url(self, obj):
         if obj.photo:
             return obj.photo.url
-        return "/static/images/default_student.png"  # ← укажи свой дефолтный путь
+        return "/static/images/default_student.png"
 
     def get_level_history(self, obj):
-        history = obj.level_history.all().order_by('-changed_at')[:20]  # последние 20
+        history = obj.level_history.all().order_by('-changed_at')[:20]
         return LevelHistorySerializer(history, many=True).data
 
     def get_comments(self, obj):
-        comments = obj.comments.all().order_by('-created_at')[:50]  # последние 50
+        comments = obj.comments.all().order_by('-created_at')[:50]
         return CommentListSerializer(comments, many=True).data
 
     def get_medical_files(self, obj):
@@ -309,7 +358,7 @@ class StudentDetailSerializer(serializers.ModelSerializer):
 
     def get_kanban_card(self, obj):
         try:
-            card = obj.kanban_card.first()  
+            card = obj.kanban_card.first()
             if not card:
                 return None
             return {
@@ -320,10 +369,31 @@ class StudentDetailSerializer(serializers.ModelSerializer):
                 "position": card.position,
                 "board_id": card.column.board.id,
                 "board_title": card.column.board.title,
-                "labels": card.labels  
+                "labels": card.labels
             }
         except Exception:
             return None
+
+    def get_level_history_calendar(self, obj):
+        calendar = {}
+        for year in range(2023, 2027):
+            calendar[year] = []
+            for month in range(1, 13):
+                lbm = obj.level_by_month.filter(year=year, month=month).first()
+                if lbm:
+                    calendar[year].append(LevelByMonthSerializer(lbm).data)
+                else:
+                    calendar[year].append({
+                        "year": year,
+                        "month": month,
+                        "month_name": timezone.datetime(2000, month, 1).strftime('%B'),
+                        "level": None,
+                        "level_display": "—",
+                        "fired_date": None,
+                        "change_count": 0
+                    })
+        return calendar
+
 
 class MedicalFileSerializer(serializers.ModelSerializer):
     file_url = serializers.FileField(source='file', read_only=True)

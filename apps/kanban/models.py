@@ -95,6 +95,9 @@ class StudentKanbanCard(models.Model):
 
         if category in ['college'] and board_id != 'polytech':
             raise ValidationError("Студент категории Политех не может быть на доске Алабуга Старт")
+        
+        if self.column.level == 'fired' and self.student.fired_data != 'fired':
+            raise ValidationError("Для перемещения в колонку 'Уволен' необходимо указать дату увольнения у кота")
 
     def save(self, *args, **kwargs):
         self.clean()

@@ -3,20 +3,39 @@ from django import forms
 from django.shortcuts import render
 from django.contrib import messages
 from django.urls import path
-from django.utils.html import format_html
+from django.utils.html import format_html, mark_safe
 from django.http import HttpResponse
 from django.utils import timezone
 from io import BytesIO
-from .models import Student, LevelHistory, Comment, MedicalFile
+from .models import Student, LevelHistory, Comment, MedicalFile, LevelByMonth
 import pandas as pd
-from django.urls import reverse 
+from django.urls import reverse
 from apps.hr_calls.models import HrCall
+
 
 class MedicalFileInline(admin.TabularInline):
     model = MedicalFile
     extra = 1
     fields = ('file', 'description', 'uploaded_at')
     readonly_fields = ('uploaded_at',)
+
+
+class LevelByMonthInline(admin.TabularInline):
+    model = LevelByMonth
+    extra = 0
+    fields = ('year', 'month', 'level', 'fired_date', 'change_count', 'last_changed_at')
+    readonly_fields = ('change_count', 'last_changed_at')
+    ordering = ('-year', '-month')
+    can_delete = True
+
+
+class LevelHistoryInline(admin.TabularInline):
+    model = LevelHistory
+    extra = 0
+    fields = ('old_level', 'new_level', 'changed_by', 'changed_at', 'comment')
+    readonly_fields = fields
+    ordering = ('-changed_at',)
+    can_delete = False
 
 
 class ExcelImportForm(forms.Form):
@@ -28,7 +47,7 @@ class ExcelImportForm(forms.Form):
 
 @admin.register(Student)
 class StudentAdmin(admin.ModelAdmin):
-    inlines = [MedicalFileInline]
+    inlines = [MedicalFileInline, LevelByMonthInline, LevelHistoryInline]
 
     list_display = (
         'id',
@@ -45,13 +64,14 @@ class StudentAdmin(admin.ModelAdmin):
         'updated_by_display',
         'created_at',
         'updated_at',
+        'fired_date_preview',
     )
-    list_filter = ('level', 'status', 'is_called_to_hr', 'category', 'subdivision', 'created_by', 'updated_by')
+    list_filter = ('level', 'status', 'is_called_to_hr', 'category', 'subdivision', 'created_by', 'updated_by', 'fired_date')
     search_fields = ('last_name', 'first_name', 'patronymic', 'phone_personal', 'telegram', 'fio_parent')
     ordering = ('-updated_at',)
     readonly_fields = (
         'created_at', 'updated_at', 'created_by', 'updated_by',
-        'last_changed_field', 'calculated_age', 'photo_preview'
+        'last_changed_field', 'calculated_age', 'photo_preview', 'level_calendar_preview'
     )
 
     fieldsets = (
@@ -59,10 +79,22 @@ class StudentAdmin(admin.ModelAdmin):
             'fields': ('first_name', 'last_name', 'patronymic', 'birth_date', 'calculated_age', 'photo', 'photo_preview')
         }),
         ('Образование и работа', {'fields': ('direction', 'subdivision')}),
-        ('Статус и уровень', {'fields': ('level', 'status', 'is_called_to_hr', 'category')}),
+        ('Статус и уровень', {'fields': ('level', 'status', 'is_called_to_hr', 'category', 'fired_date')}),
         ('Адреса', {'fields': ('address_actual', 'address_registered')}),
         ('Контакты', {'fields': ('phone_personal', 'telegram', 'phone_parent', 'fio_parent')}),
         ('Медицинские данные', {'fields': ('medical_info',)}),
+        ('История уровней (календарь 2023–2026)', {
+            'fields': ('level_calendar_preview',),
+            'description': mark_safe(
+                '<p style="font-size:0.9em; color:#666;">'
+                'Визуализация последних уровней по месяцам. '
+                'Текущий месяц выделен жёлтым фоном. '
+                'Редактируйте уровни в таблице "Level by month" ниже. '
+                'Для уровня «Уволен» обязательна дата увольнения. '
+                'Наследование «Уволен» на последующие месяцы происходит автоматически.'
+                '</p>'
+            )
+        }),
         ('Метаданные', {
             'fields': ('created_at', 'created_by', 'updated_at', 'updated_by', 'last_changed_field')
         }),
@@ -201,16 +233,67 @@ class StudentAdmin(admin.ModelAdmin):
             old_obj = Student.objects.get(pk=obj.pk)
             if not old_obj.is_called_to_hr and obj.is_called_to_hr:
                 from apps.hr_calls.models import HrCall
-                # Проверяем, нет ли уже открытого вызова (problem_resolved=False)
                 if not HrCall.objects.filter(student=obj, person_type='student', problem_resolved=False).exists():
                     HrCall.objects.create(
                         person_type='student',
                         student=obj,
-                        reason="",  # пустая причина
+                        reason="",
                         created_by=obj.updated_by
                     )
 
         super().save_model(request, obj, form, change)
+
+    def level_calendar_preview(self, obj):
+        if not obj.pk:
+            return "Сохраните студента для просмотра календаря"
+
+        current_year, current_month = timezone.now().year, timezone.now().month
+
+        html = '<div style="font-family: Arial, sans-serif; margin: 20px 0;">'
+        html += '<h3 style="text-align: center; margin-bottom: 15px;">История уровней по месяцам (2023–2026)</h3>'
+        html += '<table style="width: 100%; border-collapse: collapse; font-size: 0.95em;">'
+        html += '<tr>'
+        html += '<th style="border: 1px solid #ddd; padding: 10px; background: #f5f5f5; text-align: center;">Год / Месяц</th>'
+        months = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+        for m in months:
+            html += f'<th style="border: 1px solid #ddd; padding: 8px; background: #f5f5f5; text-align: center;">{m}</th>'
+        html += '</tr>'
+
+        for year in range(2023, 2027):
+            is_current_year = year == current_year
+            row_style = 'background: #fffde7;' if is_current_year else ''
+            html += f'<tr style="{row_style}">'
+            html += f'<td style="border: 1px solid #ddd; padding: 10px; font-weight: bold; text-align: center;">{year}</td>'
+            for month in range(1, 13):
+                lbm = obj.level_by_month.filter(year=year, month=month).first()
+                is_current_month = is_current_year and month == current_month
+                cell_style = 'background: #e8f5e8;' if is_current_month else ''
+                if lbm and lbm.level:
+                    display = lbm.get_level_display()
+                    if lbm.level == 'fired' and lbm.fired_date:
+                        display += f"<br><small>({lbm.fired_date.strftime('%d.%m.%Y')})</small>"
+                    changes = f"<br><small>({lbm.change_count} изм.)</small>" if lbm.change_count > 1 else ""
+                    html += f'<td style="border: 1px solid #ddd; padding: 8px; text-align: center; {cell_style}">{display}{changes}</td>'
+                else:
+                    html += f'<td style="border: 1px solid #ddd; padding: 8px; text-align: center; color: #999; {cell_style}">—</td>'
+            html += '</tr>'
+        html += '</table>'
+        html += '<p style="margin-top: 15px; font-size: 0.9em; color: #666;">'
+        html += '• Текущий месяц выделен зелёным фоном.<br>'
+        html += '• Текущий год — жёлтым фоном строки.<br>'
+        html += '• Редактируйте уровни в таблице "Level by month" ниже.<br>'
+        html += '• Для уровня «Уволен» обязательна дата увольнения.<br>'
+        html += '• Наследование «Уволен» на последующие месяцы происходит автоматически.'
+        html += '</p>'
+        html += '</div>'
+        return mark_safe(html)
+    level_calendar_preview.short_description = "Календарь уровней"
+
+    def fired_date_preview(self, obj):
+        if obj.fired_date:
+            return obj.fired_date.strftime('%d.%m.%Y')
+        return "—"
+    fired_date_preview.short_description = "Дата увольнения"
 
     def calculated_age(self, obj):
         if obj.birth_date:
@@ -244,9 +327,18 @@ class StudentAdmin(admin.ModelAdmin):
     updated_by_display.short_description = "Кем изменён"
 
     def level_badge(self, obj):
-        colors = {'black': 'bg-dark text-white', 'red': 'bg-danger text-white', 'yellow': 'bg-warning text-dark', 'green': 'bg-success text-white'}
+        colors = {
+            'black': 'bg-dark text-white',
+            'red': 'bg-danger text-white',
+            'yellow': 'bg-warning text-dark',
+            'green': 'bg-success text-white',
+            'fired': 'bg-secondary text-white'
+        }
         color = colors.get(obj.level, 'bg-secondary text-white')
-        return format_html('<span class="badge {}">{}</span>', color, obj.get_level_display())
+        display = obj.get_level_display()
+        if obj.level == 'fired' and obj.fired_date:
+            display += f" ({obj.fired_date.strftime('%d.%m.%Y')})"
+        return format_html('<span class="badge {}">{}</span>', color, display)
     level_badge.short_description = "Уровень"
 
     def status_badge(self, obj):
@@ -260,6 +352,32 @@ class StudentAdmin(admin.ModelAdmin):
             return format_html('<span class="badge bg-info text-dark">Вызван к HR</span>')
         return format_html('<span class="badge bg-secondary text-white">Не вызван</span>')
     hr_status_badge.short_description = "Вызов к HR"
+
+
+@admin.register(LevelByMonth)
+class LevelByMonthAdmin(admin.ModelAdmin):
+    list_display = ('student_link', 'year', 'month_name', 'level_display', 'fired_date', 'change_count')
+    list_filter = ('year', 'month', 'level')
+    search_fields = ('student__last_name', 'student__first_name')
+    ordering = ('-year', '-month')
+
+    def student_link(self, obj):
+        url = reverse("admin:students_student_change", args=[obj.student.id])
+        return format_html('<a href="{}">{}</a>', url, obj.student.full_name)
+    student_link.short_description = "Студент"
+
+    def month_name(self, obj):
+        return timezone.datetime(2000, obj.month, 1).strftime('%B')
+    month_name.short_description = "Месяц"
+
+    def level_display(self, obj):
+        if obj.level:
+            display = obj.get_level_display()
+            if obj.level == 'fired' and obj.fired_date:
+                display += f" ({obj.fired_date.strftime('%d.%m.%Y')})"
+            return display
+        return "—"
+    level_display.short_description = "Уровень"
 
 
 @admin.register(LevelHistory)
@@ -329,6 +447,7 @@ class CommentAdmin(admin.ModelAdmin):
         return obj.text[:50] + '...' if len(obj.text) > 50 else obj.text
     text_preview.short_description = "Комментарий"
 
+
 @admin.register(MedicalFile)
 class MedicalFileAdmin(admin.ModelAdmin):
     list_display = ('student', 'description', 'file_link', 'uploaded_by', 'uploaded_at')
@@ -345,4 +464,3 @@ class MedicalFileAdmin(admin.ModelAdmin):
         return "Нет файла"
     file_link.short_description = "Файл"
     file_link.admin_order_field = 'file'
-    

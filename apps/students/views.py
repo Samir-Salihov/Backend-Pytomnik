@@ -1,12 +1,13 @@
-# apps/students/views.py
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 
-from .models import MedicalFile, Student, LevelHistory, Comment, LEVEL_CHOICES  
+from .models import LevelByMonth, MedicalFile, Student, LevelHistory, Comment, LEVEL_CHOICES  
 from .serializers import (
+    LevelByMonthSerializer,
+    LevelByMonthUpdateSerializer,
     MedicalFileCreateSerializer,
     MedicalFileSerializer,
     StudentDetailSerializer,
@@ -241,15 +242,6 @@ class CommentDeleteView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
-from django.shortcuts import get_object_or_404
-from rest_framework import status
-from .models import Student, MedicalFile
-from .serializers import MedicalFileSerializer, MedicalFileCreateSerializer
-
-
 class MedicalFileListView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -293,7 +285,6 @@ class MedicalFileDeleteView(APIView):
     permission_classes = [IsAuthenticated, IsAdminUser]
 
     def delete(self, request, student_pk, pk):
-        # Проверяем, что файл принадлежит именно этому студенту
         medical_file = get_object_or_404(MedicalFile, pk=pk, student_id=student_pk)
         file_description = medical_file.description or medical_file.file.name[:30] + '...'
         medical_file.delete()
@@ -301,3 +292,76 @@ class MedicalFileDeleteView(APIView):
             "success": True,
             "message": f"Медицинский файл «{file_description}» успешно удалён"
         }, status=status.HTTP_204_NO_CONTENT)
+
+
+class StudentLevelCalendarView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        student = get_object_or_404(Student, pk=pk)
+        serializer = StudentDetailSerializer(student)
+        return Response({
+            "success": True,
+            "student_id": student.id,
+            "full_name": student.full_name,
+            "calendar": serializer.data.get('level_history_calendar', {})
+        }, status=status.HTTP_200_OK)
+
+
+class StudentLevelMonthDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk, year, month):
+        student = get_object_or_404(Student, pk=pk)
+        history = student.level_history.filter(changed_at__year=year, changed_at__month=month).order_by('-changed_at')
+        serializer = LevelHistorySerializer(history, many=True)
+        return Response({
+            "success": True,
+            "year": year,
+            "month": month,
+            "detailed_history": serializer.data
+        })
+
+
+class StudentLevelByMonthUpdateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, pk, year, month):
+        student = get_object_or_404(Student, pk=pk)
+        lbm, created = LevelByMonth.objects.get_or_create(
+            student=student,
+            year=year,
+            month=month,
+            defaults={'change_count': 0}
+        )
+        serializer = LevelByMonthUpdateSerializer(lbm, data=request.data, partial=True, context={'request': request})
+        if serializer.is_valid():
+            serializer.save()
+            return Response({
+                "success": True,
+                "message": "Уровень за месяц обновлён",
+                "month_data": LevelByMonthSerializer(lbm).data
+            })
+        return Response({
+            "success": False,
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request, pk, year, month):
+        student = get_object_or_404(Student, pk=pk)
+        lbm = get_object_or_404(LevelByMonth, student=student, year=year, month=month)
+        lbm.level = None
+        lbm.fired_date = None
+        lbm.change_count = max(0, lbm.change_count - 1)
+        lbm.save()
+        LevelHistory.objects.create(
+            student=student,
+            old_level=lbm.level,
+            new_level=None,
+            changed_by=request.user,
+            comment="Удаление уровня через календарь"
+        )
+        return Response({
+            "success": True,
+            "message": "Уровень за месяц удалён (прочерк)"
+        })
