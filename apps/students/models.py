@@ -84,7 +84,7 @@ class Student(models.Model):
 
     is_called_to_hr = models.BooleanField("Вызван к HR", default=False, help_text="Установите True для вызова к HR")
 
-    fired_date = models.DateField("Дата увольнения", null=True, blank=True)  # опционально
+    fired_date = models.DateField("Дата увольнения", null=True, blank=True)
 
     last_changed_field = models.CharField (
         "Последнее изменённое поле",

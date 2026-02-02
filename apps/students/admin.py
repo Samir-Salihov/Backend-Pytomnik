@@ -120,11 +120,27 @@ class StudentAdmin(admin.ModelAdmin):
                     created = 0
                     errors = []
 
+                    # Базовые обязательные колонки
                     required = ['Фамилия', 'Имя', 'Личный телефон']
                     missing = [col for col in required if col not in df.columns]
                     if missing:
                         messages.error(request, f"Отсутствуют обязательные колонки: {', '.join(missing)}")
                         return render(request, "admin/students/import_excel.html", {"form": form})
+
+                    # Словарь для уровней (display → code)
+                    level_map = {
+                        'Чёрный': 'black',
+                        'Красный': 'red',
+                        'Жёлтый': 'yellow',
+                        'Зелёный': 'green',
+                        'Уволен': 'fired',
+                    }
+
+                    # Словарь для месяцев
+                    month_map = {
+                        'Январь': 1, 'Февраль': 2, 'Март': 3, 'Апрель': 4, 'Май': 5, 'Июнь': 6,
+                        'Июль': 7, 'Август': 8, 'Сентябрь': 9, 'Октябрь': 10, 'Ноябрь': 11, 'Декабрь': 12
+                    }
 
                     for idx, row in df.iterrows():
                         try:
@@ -134,8 +150,8 @@ class StudentAdmin(admin.ModelAdmin):
                                 'patronymic': str(row.get('Отчество', '') or '').strip() or None,
                                 'direction': str(row.get('Направление', '') or '').strip(),
                                 'subdivision': str(row.get('Подразделение', '') or '').strip(),
-                                'level': str(row.get('Уровень', 'black') or 'black').lower(),
-                                'status': str(row.get('Статус', 'active') or 'active').lower(),
+                                'level': 'black',  # временно, будет перезаписано синхронизацией
+                                'status': 'active',
                                 'category': str(row.get('Категория', 'college') or 'college').lower(),
                                 'address_actual': str(row.get('Адрес фактический', '') or '').strip(),
                                 'address_registered': str(row.get('Адрес по прописке', '') or '').strip(),
@@ -155,15 +171,73 @@ class StudentAdmin(admin.ModelAdmin):
                             if Student.objects.filter(phone_personal=data['phone_personal']).exists():
                                 raise ValueError(f"Телефон {data['phone_personal']} уже используется")
 
-                            Student.objects.create(**data)
+                            # Создаём студента
+                            student = Student.objects.create(**data)
+
+                            # Парсинг уровней по месяцам
+                            months_imported = 0
+                            for col in df.columns:
+                                col_str = str(col).strip()
+                                if col_str.startswith('Уровень '):
+                                    parts = col_str[len('Уровень '):].split()
+                                    if len(parts) == 2:
+                                        month_name = parts[0]
+                                        year_str = parts[1]
+                                        if month_name in month_map and year_str.isdigit():
+                                            year = int(year_str)
+                                            month = month_map[month_name]
+                                            if 2023 <= year <= 2026:
+                                                level_display = str(row.get(col, '')).strip()
+                                                level = level_map.get(level_display)
+                                                if level:
+                                                    LevelByMonth.objects.update_or_create(
+                                                        student=student,
+                                                        year=year,
+                                                        month=month,
+                                                        defaults={
+                                                            'level': level,
+                                                            'last_changed_at': timezone.now(),
+                                                            'change_count': 1
+                                                        }
+                                                    )
+                                                    months_imported += 1
+
+                                elif col_str.startswith('Дата увольнения '):
+                                    parts = col_str[len('Дата увольнения '):].split()
+                                    if len(parts) == 2:
+                                        month_name = parts[0]
+                                        year_str = parts[1]
+                                        if month_name in month_map and year_str.isdigit():
+                                            year = int(year_str)
+                                            month = month_map[month_name]
+                                            if 2023 <= year <= 2026:
+                                                date_str = row.get(col)
+                                                if pd.notna(date_str):
+                                                    try:
+                                                        fired_date = pd.to_datetime(date_str).date()
+                                                        lbm, _ = LevelByMonth.objects.get_or_create(
+                                                            student=student,
+                                                            year=year,
+                                                            month=month,
+                                                            defaults={'level': None}
+                                                        )
+                                                        if lbm.level == 'fired':
+                                                            lbm.fired_date = fired_date
+                                                            lbm.last_changed_at = timezone.now()
+                                                            lbm.save()
+                                                    except Exception as e:
+                                                        errors.append(f"Строка {idx + 2}: Неверная дата увольнения в колонке {col}: {e}")
+
                             created += 1
+                            if months_imported > 0:
+                                messages.info(request, f"Кот {student.full_name}: импортировано уровней за {months_imported} месяцев")
 
                         except Exception as e:
                             errors.append(f"Строка {idx + 2}: {str(e)}")
 
                     if errors:
                         messages.warning(request, f"Создано {created} котов. Ошибки в {len(errors)} строках.")
-                        for error in errors[:10]:
+                        for error in errors[:20]:
                             messages.warning(request, error)
                     else:
                         messages.success(request, f"Успешно создано {created} котов!")
