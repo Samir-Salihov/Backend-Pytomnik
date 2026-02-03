@@ -67,7 +67,7 @@ class Student(models.Model):
     birth_date = models.DateField("Дата рождения", null=True, blank=True)
 
     photo = models.ImageField("Фото студента", upload_to='students/photos/', blank=True, null=True)
-
+ 
     level = models.CharField("Уровень доступа", max_length=10, choices=LEVEL_CHOICES, null=True, blank=True)
     status = models.CharField("Статус", max_length=20, choices=STATUS_CHOICES, default='active')
     category = models.CharField("Категория", max_length=30, choices=CATEGORY_CHOICES)

@@ -101,7 +101,7 @@ class StudentUpdateSerializer(serializers.ModelSerializer):
             'first_name', 'last_name', 'patronymic', 'direction', 'subdivision',
             'age', 'level', 'status', 'category', 'address_actual', 'address_registered',
             'phone_personal', 'telegram', 'phone_parent', 'medical_info', 'is_called_to_hr',
-            'fired_date'  # ← добавлено: теперь дата увольнения редактируемая через API
+            'fired_date', 'photo',   # ← добавлено: теперь дата увольнения редактируемая через API
         ]
 
     def validate(self, attrs):
@@ -308,7 +308,7 @@ class StudentDetailSerializer(serializers.ModelSerializer):
     medical_files = serializers.SerializerMethodField(read_only=True)
     kanban_card = serializers.SerializerMethodField(read_only=True)
     level_history_calendar = serializers.SerializerMethodField(read_only=True)
-    fired_date_display = serializers.SerializerMethodField(read_only=True)  # отображение даты увольнения
+    fired_date_display = serializers.SerializerMethodField(read_only=True) 
 
     class Meta:
         model = Student

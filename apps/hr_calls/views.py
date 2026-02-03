@@ -24,7 +24,7 @@ class HrCallListView(APIView):
 
 
 class HrCallDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated] 
 
     def get(self, request, pk):
         call = get_object_or_404(HrCall, pk=pk)
