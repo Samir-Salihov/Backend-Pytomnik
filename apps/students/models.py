@@ -5,6 +5,9 @@ from django.core.exceptions import ValidationError
 from dateutil.relativedelta import relativedelta
 import logging
 
+from utils import student_utils
+
+
 logger = logging.getLogger(__name__)
 
 User = get_user_model()
@@ -67,8 +70,8 @@ class Student(models.Model):
     last_name = models.CharField("Фамилия", max_length=100)
     patronymic = models.CharField("Отчество", max_length=100, blank=True, null=True)
 
-    direction = models.CharField("Направление", max_length=200, blank=True, null=True)
-    subdivision = models.CharField("Подразделение", max_length=200, help_text="Где работает/учится", blank=True, null=True)
+    direction = models.CharField("Направление", max_length=200, choices=student_utils.DIRECTION_CHOICES, blank=True, null=True)
+    subdivision = models.CharField("Подразделение", max_length=200, choices=student_utils.DIVISIONS_CHOICES, help_text="Где работает/учится", blank=True, null=True)
 
     birth_date = models.DateField("Дата рождения", null=True, blank=True)
 
