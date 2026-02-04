@@ -5,7 +5,7 @@ from rest_framework import status
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 
-from .models import LevelByMonth, MedicalFile, Student, LevelHistory, Comment, LEVEL_CHOICES  
+from .models import LevelByMonth, MedicalFile, Student, LevelHistory, Comment, LEVEL_CHOICES, ViolationAct  
 from .serializers import (
     LevelByMonthSerializer,
     LevelByMonthUpdateSerializer,
@@ -18,7 +18,9 @@ from .serializers import (
     LevelHistorySerializer,
     CommentListSerializer,
     CommentCreateSerializer,
-    CommentUpdateSerializer
+    CommentUpdateSerializer,
+    ViolationActCreateSerializer,
+    ViolationActSerializer
 )
 
 
@@ -375,3 +377,55 @@ class StudentLevelByMonthUpdateView(APIView):
             "success": True,
             "message": "Уровень за месяц удалён (прочерк)"
         })
+
+
+class ViolationActListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, student_pk):
+        student = get_object_or_404(Student, pk=student_pk)
+        acts = student.violation_acts.all().order_by('-uploaded_at')
+        serializer = ViolationActSerializer(acts, many=True)
+        return Response({
+            "success": True,
+            "student_id": student.id,
+            "violation_acts": serializer.data,
+            "count": acts.count()
+        }, status=status.HTTP_200_OK)
+
+
+class ViolationActUploadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, student_pk):
+        student = get_object_or_404(Student, pk=student_pk)
+        serializer = ViolationActCreateSerializer(
+            data=request.data,
+            context={'request': request, 'student': student}
+        )
+        if serializer.is_valid():
+            act = serializer.save()
+            return Response({
+                "success": True,
+                "message": "Объяснительная/Акт загружен",
+                "act": ViolationActSerializer(act).data
+            }, status=status.HTTP_201_CREATED)
+
+        return Response({
+            "success": False,
+            "message": "Ошибка при загрузке",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ViolationActDeleteView(APIView):
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def delete(self, request, student_pk, pk):
+        act = get_object_or_404(ViolationAct, pk=pk, student_id=student_pk)
+        description = act.description[:30] + '...'
+        act.delete()
+        return Response({
+            "success": True,
+            "message": f"Объяснительная/Акт «{description}» удалён"
+        }, status=status.HTTP_204_NO_CONTENT)

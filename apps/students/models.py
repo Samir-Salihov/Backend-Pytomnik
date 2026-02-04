@@ -30,6 +30,12 @@ CATEGORY_CHOICES = [
     ('alabuga_mulatki', 'Алабуга Старт (МИР)'),
 ]
 
+KVAZAR_RANK_CHOICES = [
+    ('sergeant', 'Сержант'),
+    ('private', 'Рядовой'),
+    ('reserve', 'Запас'),
+]
+
 YEARS_CHOICES = [(y, str(y)) for y in range(2023, 2027)]
 MONTHS_CHOICES = [(m, str(m)) for m in range(1, 13)]
 
@@ -61,24 +67,24 @@ class Student(models.Model):
     last_name = models.CharField("Фамилия", max_length=100)
     patronymic = models.CharField("Отчество", max_length=100, blank=True, null=True)
 
-    direction = models.CharField("Направление", max_length=200)
-    subdivision = models.CharField("Подразделение", max_length=200, help_text="Где работает/учится")
+    direction = models.CharField("Направление", max_length=200, blank=True, null=True)
+    subdivision = models.CharField("Подразделение", max_length=200, help_text="Где работает/учится", blank=True, null=True)
 
     birth_date = models.DateField("Дата рождения", null=True, blank=True)
 
     photo = models.ImageField("Фото студента", upload_to='students/photos/', blank=True, null=True)
- 
+
     level = models.CharField("Уровень доступа", max_length=10, choices=LEVEL_CHOICES, null=True, blank=True)
     status = models.CharField("Статус", max_length=20, choices=STATUS_CHOICES, default='active')
     category = models.CharField("Категория", max_length=30, choices=CATEGORY_CHOICES)
 
-    address_actual = models.TextField("Фактический адрес проживания")
-    address_registered = models.TextField("Адрес по прописке")
+    address_actual = models.TextField("Фактический адрес проживания", blank=True, null=True)
+    address_registered = models.TextField("Адрес по прописке", blank=True, null=True)
 
-    phone_personal = models.CharField("Личный телефон", max_length=20, unique=True)
+    phone_personal = models.CharField("Личный телефон", max_length=20, blank=True, null=True)
     telegram = models.CharField("Telegram (@username)", max_length=100, blank=True, null=True)
-    phone_parent = models.CharField("Телефон родителя/представителя", max_length=20)
-    fio_parent = models.CharField("ФИО родителя/представителя", max_length=200)
+    phone_parent = models.CharField("Телефон родителя/представителя", max_length=20, blank=True, null=True)
+    fio_parent = models.CharField("ФИО родителя/представителя", max_length=200, blank=True, null=True)
 
     medical_info = models.TextField("Медицинские данные", blank=True, null=True)
 
@@ -86,13 +92,21 @@ class Student(models.Model):
 
     fired_date = models.DateField("Дата увольнения", null=True, blank=True)
 
-    last_changed_field = models.CharField (
+    last_changed_field = models.CharField(
         "Последнее изменённое поле",
         max_length=200,
         blank=True,
         null=True,
         help_text="Автоматически заполняется при смене уровня/статуса"
     )
+
+    # НОВЫЕ ПОЛЯ
+    olympiads_participation = models.TextField("Участие в олимпиадах", blank=True, null=True)
+    kvazar_rank = models.CharField("Участие в Квазаре", max_length=20, choices=KVAZAR_RANK_CHOICES, blank=True, null=True)
+    rating_place = models.PositiveIntegerField("Место в рейтинге", blank=True, null=True)
+    average_ws = models.DecimalField("Средний WS", max_digits=5, decimal_places=2, blank=True, null=True)
+    average_mbo = models.DecimalField("Средний МБО", max_digits=5, decimal_places=2, blank=True, null=True)
+    average_di = models.DecimalField("Средний ДИ", max_digits=5, decimal_places=2, blank=True, null=True)
 
     created_at = models.DateTimeField("Создан", auto_now_add=True)
     updated_at = models.DateTimeField("Изменён", auto_now=True)
@@ -132,7 +146,6 @@ class Student(models.Model):
             if age is not None and (age < 14 or age > 30):
                 raise ValidationError("Возраст должен быть от 14 до 30 лет")
 
-        # НОВАЯ ВАЛИДАЦИЯ: дата увольнения только если уровень 'fired'
         if self.fired_date and self.level != 'fired':
             raise ValidationError("Вы не можете указать дату увольнения, если кот не уволен")
 
@@ -220,3 +233,24 @@ class MedicalFile(models.Model):
 
     def __str__(self):
         return f"{self.description or 'Файл'} для {self.student.full_name}"
+
+
+class ViolationAct(models.Model):
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="violation_acts")
+    description = models.TextField("Описание нарушения/акта")
+    file = models.FileField("Файл", upload_to='students/violation_acts/', blank=True, null=True)
+    uploaded_at = models.DateTimeField("Загружен", auto_now_add=True)
+    uploaded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        verbose_name="Загрузил"
+    )
+
+    class Meta:
+        verbose_name = "Объяснительная/Акт"
+        verbose_name_plural = "Объяснительные и Акты"
+        ordering = ['-uploaded_at']
+
+    def __str__(self):
+        return f"{self.description[:50]}... для {self.student.full_name}"

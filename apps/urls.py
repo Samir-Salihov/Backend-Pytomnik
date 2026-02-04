@@ -25,6 +25,8 @@ from apps.analytics.views import AnalyticsDashboardView, LevelDistributionView
 
 from apps.analytics.admin import AnalyticsAdmin 
 
+from apps.students.views import ViolationActListView, ViolationActUploadView, ViolationActDeleteView
+
 
 urlpatterns = [
     
@@ -79,4 +81,8 @@ urlpatterns = [
     path('students/<int:pk>/level-calendar/', StudentLevelCalendarView.as_view(), name='level-calendar'),
     path('students/<int:pk>/level-month/<int:year>/<int:month>/', StudentLevelMonthDetailView.as_view(), name='level-month-detail'),
     path('students/<int:pk>/level-month/<int:year>/<int:month>/update/', StudentLevelByMonthUpdateView.as_view(), name='level-month-update'),
+
+    path('students/<int:student_pk>/violation-acts/', ViolationActListView.as_view()),
+    path('students/<int:student_pk>/violation-acts/upload/', ViolationActUploadView.as_view()),
+    path('students/<int:student_pk>/violation-acts/<int:pk>/delete/', ViolationActDeleteView.as_view()),
 ]

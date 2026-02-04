@@ -7,10 +7,11 @@ from django.utils.html import format_html, mark_safe
 from django.http import HttpResponse
 from django.utils import timezone
 from io import BytesIO
-from .models import Student, LevelHistory, Comment, MedicalFile, LevelByMonth
+from .models import Student, LevelHistory, Comment, MedicalFile, LevelByMonth, ViolationAct
 import pandas as pd
 from django.urls import reverse
 from apps.hr_calls.models import HrCall
+from decimal import Decimal, InvalidOperation
 
 
 class MedicalFileInline(admin.TabularInline):
@@ -38,6 +39,13 @@ class LevelHistoryInline(admin.TabularInline):
     can_delete = False
 
 
+class ViolationActInline(admin.TabularInline):
+    model = ViolationAct
+    extra = 1
+    fields = ('description', 'file', 'uploaded_at')
+    readonly_fields = ('uploaded_at',)
+
+
 class ExcelImportForm(forms.Form):
     excel_file = forms.FileField(
         label="Выберите файл Excel (.xlsx)",
@@ -47,7 +55,7 @@ class ExcelImportForm(forms.Form):
 
 @admin.register(Student)
 class StudentAdmin(admin.ModelAdmin):
-    inlines = [MedicalFileInline, LevelByMonthInline, LevelHistoryInline]
+    inlines = [MedicalFileInline, LevelByMonthInline, LevelHistoryInline, ViolationActInline]
 
     list_display = (
         'id',
@@ -98,6 +106,16 @@ class StudentAdmin(admin.ModelAdmin):
         ('Метаданные', {
             'fields': ('created_at', 'created_by', 'updated_at', 'updated_by', 'last_changed_field')
         }),
+        ('Дополнительная информация', {  
+            'fields': (
+                'olympiads_participation',
+                'kvazar_rank',
+                'rating_place',
+                'average_ws',
+                'average_mbo',
+                'average_di',
+            )
+        }),
     )
 
     change_list_template = "admin/students/student_changelist.html"
@@ -116,27 +134,23 @@ class StudentAdmin(admin.ModelAdmin):
             if form.is_valid():
                 file = request.FILES['excel_file']
                 try:
-                    df = pd.read_excel(BytesIO(file.read()))
+                    df = pd.read_excel(BytesIO(file.read()), engine='openpyxl')
                     created = 0
                     errors = []
 
-                    # Базовые обязательные колонки
-                    required = ['Фамилия', 'Имя', 'Личный телефон']
-                    missing = [col for col in required if col not in df.columns]
-                    if missing:
-                        messages.error(request, f"Отсутствуют обязательные колонки: {', '.join(missing)}")
-                        return render(request, "admin/students/import_excel.html", {"form": form})
-
-                    # Словарь для уровней (display → code)
+                    # Маппинги
                     level_map = {
-                        'Чёрный': 'black',
-                        'Красный': 'red',
-                        'Жёлтый': 'yellow',
-                        'Зелёный': 'green',
-                        'Уволен': 'fired',
+                        'Чёрный': 'black', 'черный': 'black', 'Чёрный уровень': 'black',
+                        'Красный': 'red', 'красный': 'red',
+                        'Жёлтый': 'yellow', 'желтый': 'yellow',
+                        'Зелёный': 'green', 'зеленый': 'green',
+                        'Уволен': 'fired', 'уволен': 'fired',
                     }
-
-                    # Словарь для месяцев
+                    kvazar_map = {
+                        'Сержант': 'sergeant',
+                        'Рядовой': 'private',
+                        'Запас': 'reserve',
+                    }
                     month_map = {
                         'Январь': 1, 'Февраль': 2, 'Март': 3, 'Апрель': 4, 'Май': 5, 'Июнь': 6,
                         'Июль': 7, 'Август': 8, 'Сентябрь': 9, 'Октябрь': 10, 'Ноябрь': 11, 'Декабрь': 12
@@ -144,93 +158,139 @@ class StudentAdmin(admin.ModelAdmin):
 
                     for idx, row in df.iterrows():
                         try:
+                            # Функция безопасного получения строки (убирает NaN → пустая строка)
+                            def safe_str(val, default=''):
+                                if pd.isna(val):
+                                    return default
+                                return str(val).strip()
+
+                            # Парсинг ФИО
+                            full_name_str = safe_str(row.get('ФИО'))
+                            last_name = safe_str(row.get('Фамилия'))
+                            first_name = safe_str(row.get('Имя'))
+                            patronymic = safe_str(row.get('Отчество')) or None
+
+                            if not last_name or not first_name:
+                                if full_name_str:
+                                    parts = full_name_str.split()
+                                    if len(parts) >= 2:
+                                        last_name = parts[0]
+                                        first_name = parts[1]
+                                        patronymic = parts[2] if len(parts) >= 3 else None
+                                    else:
+                                        raise ValueError("В колонке ФИО должно быть минимум 2 слова (фамилия + имя)")
+                                else:
+                                    raise ValueError("Должны быть указаны Фамилия+Имя или колонка ФИО")
+
                             data = {
-                                'first_name': str(row.get('Имя', '')).strip(),
-                                'last_name': str(row.get('Фамилия', '')).strip(),
-                                'patronymic': str(row.get('Отчество', '') or '').strip() or None,
-                                'direction': str(row.get('Направление', '') or '').strip(),
-                                'subdivision': str(row.get('Подразделение', '') or '').strip(),
-                                'level': 'black',  # временно, будет перезаписано синхронизацией
-                                'status': 'active',
-                                'category': str(row.get('Категория', 'college') or 'college').lower(),
-                                'address_actual': str(row.get('Адрес фактический', '') or '').strip(),
-                                'address_registered': str(row.get('Адрес по прописке', '') or '').strip(),
-                                'phone_personal': str(row.get('Личный телефон', '')).strip(),
-                                'telegram': str(row.get('Telegram', '') or '').strip() or None,
-                                'phone_parent': str(row.get('Телефон родителя', '') or '').strip(),
-                                'fio_parent': str(row.get('ФИО родителя', '') or '').strip(),
-                                'medical_info': str(row.get('Медицинские данные', '') or '').strip() or None,
+                                'first_name': first_name,
+                                'last_name': last_name,
+                                'patronymic': patronymic,
+                                'direction': safe_str(row.get('Направление')),
+                                'subdivision': safe_str(row.get('Подразделение')),
+                                'category': safe_str(row.get('Категория', 'college')).lower() or 'college',
+                                'address_actual': safe_str(row.get('Адрес фактический')),
+                                'address_registered': safe_str(row.get('Адрес по прописке')),
+                                'phone_personal': safe_str(row.get('Личный телефон')) or None,
+                                'telegram': safe_str(row.get('Telegram')) or None,
+                                'phone_parent': safe_str(row.get('Телефон родителя')),
+                                'fio_parent': safe_str(row.get('ФИО родителя')),
+                                'medical_info': safe_str(row.get('Медицинские данные')) or None,
                                 'created_by': request.user,
                                 'updated_by': request.user,
                             }
 
-                            if not data['first_name'] or not data['last_name']:
-                                raise ValueError("Имя и фамилия обязательны")
-                            if not data['phone_personal']:
-                                raise ValueError("Личный телефон обязателен")
-                            if Student.objects.filter(phone_personal=data['phone_personal']).exists():
+                            # Новые поля
+                            data['olympiads_participation'] = safe_str(row.get('Участие в олимпиадах')) or None
+
+                            kvazar = safe_str(row.get('Участие в Квазаре'))
+                            data['kvazar_rank'] = kvazar_map.get(kvazar) if kvazar else None
+
+                            rating = row.get('Место в рейтинге')
+                            if pd.notna(rating) and safe_str(rating):
+                                try:
+                                    data['rating_place'] = int(rating)
+                                except (ValueError, TypeError):
+                                    errors.append(f"Строка {idx + 2}: Неверное место в рейтинге: {rating}")
+
+                            for field, col_name in [
+                                ('average_ws', 'Средний WS'),
+                                ('average_mbo', 'Средний МБО'),
+                                ('average_di', 'Средний ДИ'),
+                            ]:
+                                val = row.get(col_name)
+                                if pd.notna(val) and safe_str(val):
+                                    val_str = safe_str(val).replace(',', '.')
+                                    try:
+                                        data[field] = Decimal(val_str)
+                                    except (InvalidOperation, ValueError):
+                                        errors.append(f"Строка {idx + 2}: Неверное значение {col_name}: {val}")
+
+                            # Проверка на дубликат телефона (только если указан)
+                            if data['phone_personal'] and Student.objects.filter(phone_personal=data['phone_personal']).exists():
                                 raise ValueError(f"Телефон {data['phone_personal']} уже используется")
 
-                            # Создаём студента
+                            data['level'] = 'black'
+                            data['status'] = 'active'
+
                             student = Student.objects.create(**data)
 
-                            # Парсинг уровней по месяцам
-                            months_imported = 0
+                            # Календарь (только заполненные)
+                            month_data = {}
                             for col in df.columns:
                                 col_str = str(col).strip()
                                 if col_str.startswith('Уровень '):
-                                    parts = col_str[len('Уровень '):].split()
+                                    header = col_str[len('Уровень '):].strip()
+                                    parts = header.split()
                                     if len(parts) == 2:
-                                        month_name = parts[0]
-                                        year_str = parts[1]
+                                        month_name, year_str = parts
                                         if month_name in month_map and year_str.isdigit():
                                             year = int(year_str)
                                             month = month_map[month_name]
                                             if 2023 <= year <= 2026:
-                                                level_display = str(row.get(col, '')).strip()
-                                                level = level_map.get(level_display)
-                                                if level:
-                                                    LevelByMonth.objects.update_or_create(
-                                                        student=student,
-                                                        year=year,
-                                                        month=month,
-                                                        defaults={
-                                                            'level': level,
-                                                            'last_changed_at': timezone.now(),
-                                                            'change_count': 1
-                                                        }
-                                                    )
-                                                    months_imported += 1
+                                                level_display = safe_str(row.get(col))
+                                                if level_display:
+                                                    level = level_map.get(level_display.lower())
+                                                    if level:
+                                                        month_data[(year, month)] = {'level': level, 'fired_date': None}
 
-                                elif col_str.startswith('Дата увольнения '):
-                                    parts = col_str[len('Дата увольнения '):].split()
+                            for col in df.columns:
+                                col_str = str(col).strip()
+                                if col_str.startswith('Дата увольнения '):
+                                    header = col_str[len('Дата увольнения '):].strip()
+                                    parts = header.split()
                                     if len(parts) == 2:
-                                        month_name = parts[0]
-                                        year_str = parts[1]
+                                        month_name, year_str = parts
                                         if month_name in month_map and year_str.isdigit():
                                             year = int(year_str)
                                             month = month_map[month_name]
-                                            if 2023 <= year <= 2026:
-                                                date_str = row.get(col)
-                                                if pd.notna(date_str):
+                                            key = (year, month)
+                                            if key in month_data and month_data[key]['level'] == 'fired':
+                                                date_val = row.get(col)
+                                                if pd.notna(date_val) and safe_str(date_val):
                                                     try:
-                                                        fired_date = pd.to_datetime(date_str).date()
-                                                        lbm, _ = LevelByMonth.objects.get_or_create(
-                                                            student=student,
-                                                            year=year,
-                                                            month=month,
-                                                            defaults={'level': None}
-                                                        )
-                                                        if lbm.level == 'fired':
-                                                            lbm.fired_date = fired_date
-                                                            lbm.last_changed_at = timezone.now()
-                                                            lbm.save()
+                                                        fired_date = pd.to_datetime(date_val).date()
+                                                        month_data[key]['fired_date'] = fired_date
                                                     except Exception as e:
-                                                        errors.append(f"Строка {idx + 2}: Неверная дата увольнения в колонке {col}: {e}")
+                                                        errors.append(f"Строка {idx + 2}: Неверная дата в {col}: {e}")
+
+                            months_imported = len(month_data)
+                            for (year, month), vals in month_data.items():
+                                LevelByMonth.objects.update_or_create(
+                                    student=student,
+                                    year=year,
+                                    month=month,
+                                    defaults={
+                                        'level': vals['level'],
+                                        'fired_date': vals['fired_date'],
+                                        'last_changed_at': timezone.now(),
+                                        'change_count': 1
+                                    }
+                                )
 
                             created += 1
                             if months_imported > 0:
-                                messages.info(request, f"Кот {student.full_name}: импортировано уровней за {months_imported} месяцев")
+                                messages.info(request, f"Кот {student.full_name}: импортировано {months_imported} месяцев")
 
                         except Exception as e:
                             errors.append(f"Строка {idx + 2}: {str(e)}")
@@ -514,6 +574,24 @@ class MedicalFileAdmin(admin.ModelAdmin):
     list_display = ('student', 'description', 'file_link', 'uploaded_by', 'uploaded_at')
     list_filter = ('uploaded_by',)
     search_fields = ('description', 'student__first_name', 'student__last_name', 'uploaded_by__username')
+    ordering = ('-uploaded_at',)
+
+    def file_link(self, obj):
+        if obj.file:
+            return format_html(
+                '<a href="{}" target="_blank">Скачать</a>',
+                obj.file.url
+            )
+        return "Нет файла"
+    file_link.short_description = "Файл"
+    file_link.admin_order_field = 'file'
+
+
+@admin.register(ViolationAct)
+class ViolationActAdmin(admin.ModelAdmin):
+    list_display = ('student', 'description', 'uploaded_at', 'uploaded_by', 'file_link')
+    list_filter = ('uploaded_by', 'uploaded_at')
+    search_fields = ('description', 'student__last_name', 'student__first_name')
     ordering = ('-uploaded_at',)
 
     def file_link(self, obj):

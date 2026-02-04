@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from apps.kanban.models import StudentKanbanCard
-from .models import LevelByMonth, Student, LevelHistory, Comment, MedicalFile
+from .models import LevelByMonth, Student, LevelHistory, Comment, MedicalFile, ViolationAct
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
@@ -268,6 +268,7 @@ class LevelByMonthUpdateSerializer(serializers.ModelSerializer):
         old_level = instance.level
         new_level = validated_data.get('level', old_level)
         fired_date = validated_data.get('fired_date')
+        comment = validated_data.get('comment', f'Редактирование через календарь за{instance.month}/{instance.year}')
 
         instance.level = new_level
         instance.fired_date = fired_date if new_level == 'fired' else None
@@ -280,7 +281,7 @@ class LevelByMonthUpdateSerializer(serializers.ModelSerializer):
             old_level=old_level,
             new_level=new_level,
             changed_by=self.context['request'].user,
-            comment="Редактирование через календарь"
+            comment=comment
         )
 
         if new_level == 'fired':
@@ -308,7 +309,8 @@ class StudentDetailSerializer(serializers.ModelSerializer):
     medical_files = serializers.SerializerMethodField(read_only=True)
     kanban_card = serializers.SerializerMethodField(read_only=True)
     level_history_calendar = serializers.SerializerMethodField(read_only=True)
-    fired_date_display = serializers.SerializerMethodField(read_only=True) 
+    fired_date_display = serializers.SerializerMethodField(read_only=True)
+    violation_acts = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Student
@@ -323,7 +325,10 @@ class StudentDetailSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at', 'created_by_username', 'updated_by_username',
             'last_changed_field',
             'level_history', 'comments', 'kanban_card', 'level_history_calendar',
-            'fired_date', 'fired_date_display'
+            'fired_date', 'fired_date_display',
+            'olympiads_participation', 'kvazar_rank', 'rating_place', 
+            'average_ws', 'average_mbo', 'average_di',
+            'violation_acts',
         ]
 
     def get_fired_date_display(self, obj):
@@ -360,6 +365,18 @@ class StudentDetailSerializer(serializers.ModelSerializer):
                 "uploaded_at": f.uploaded_at.strftime("%d.%m.%Y %H:%M")
             }
             for f in files
+        ]
+    
+    def get_violation_acts(self, obj):
+        acts = obj.violation_acts.all().order_by('-uploaded_at')
+        return [
+            {
+                "id": a.id,
+                "description": a.description,
+                "file_url": a.file.url if a.file else None,
+                "uploaded_at": a.uploaded_at.strftime("%d.%m.%Y %H:%M")
+            }
+            for a in acts
         ]
 
     def get_kanban_card(self, obj):
@@ -414,6 +431,33 @@ class MedicalFileCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = MedicalFile
         fields = ['file', 'description']
+
+    def create(self, validated_data):
+        request = self.context.get('request')
+        student = self.context.get('student')
+        validated_data['uploaded_by'] = request.user
+        validated_data['student'] = student
+        return super().create(validated_data)
+
+
+class ViolationActSerializer(serializers.ModelSerializer):
+    file_url = serializers.FileField(source='file', read_only=True)
+    uploaded_by_username = serializers.CharField(source='uploaded_by.username', read_only=True)
+
+    class Meta:
+        model = ViolationAct
+        fields = ['id', 'description', 'file_url', 'uploaded_at', 'uploaded_by_username']
+        read_only_fields = fields
+
+class ViolationActCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ViolationAct
+        fields = ['description', 'file']
+
+    def validate_description(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Описание обязательно")
+        return value.strip()
 
     def create(self, validated_data):
         request = self.context.get('request')
