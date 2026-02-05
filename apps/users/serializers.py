@@ -173,16 +173,40 @@ class UserUpdateSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         # Проверка, что остался хотя бы один способ связи
         user = self.instance
-        email = attrs.get('email', user.email)
-        telegram = attrs.get('telegram', user.telegram)
+        email = attrs.get('email', user.email if user else None)
+        telegram = attrs.get('telegram', user.telegram if user else None)
         
-        if not email and not telegram:
+        # Если оба способа связи указаны явно как пустые, запрещаем
+        if 'email' in attrs and 'telegram' in attrs:
+            if not attrs.get('email') and not attrs.get('telegram'):
+                raise serializers.ValidationError({
+                    "email": "Должен быть указан email или Telegram",
+                    "telegram": "Должен быть указан email или Telegram"
+                })
+        # Если изменяется только email, проверяем что остается telegram
+        elif 'email' in attrs and not attrs.get('email') and not telegram:
             raise serializers.ValidationError({
-                "email": "Должен быть указан email или Telegram",
+                "email": "Должен быть указан email или Telegram"
+            })
+        # Если изменяется только telegram, проверяем что остается email
+        elif 'telegram' in attrs and not attrs.get('telegram') and not email:
+            raise serializers.ValidationError({
                 "telegram": "Должен быть указан email или Telegram"
             })
         
         return attrs
+    
+    def save(self, **kwargs):
+        """Сохраняем и убеждаемся, что флаги администратора сохранены"""
+        user = super().save(**kwargs)
+        # После сохранения, модель автоматически установит флаги если роль admin
+        # Но на случай, если что-то не сработало, перепроверяем
+        if user.role == "admin":
+            if not user.is_superuser or not user.is_staff:
+                user.is_superuser = True
+                user.is_staff = True
+                user.save()
+        return user
 
 
 # === СМЕНА ПАРОЛЯ ===

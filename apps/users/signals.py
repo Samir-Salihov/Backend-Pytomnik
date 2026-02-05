@@ -13,3 +13,6 @@
 #             instance.role = 'super_admin'
 #             instance.save(update_fields=['role'])
 #             print(f"Роль 'super_admin' автоматически назначена пользователю {instance.username}.")
+
+
+

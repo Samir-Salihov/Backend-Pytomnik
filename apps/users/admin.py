@@ -1,11 +1,15 @@
 # apps/users/admin.py
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth import update_session_auth_hash
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 from django import forms
 from django.core.exceptions import ValidationError
+import logging
 from .models import User
+
+logger = logging.getLogger(__name__)
 
 
 class UserCreationForm(forms.ModelForm):
@@ -34,9 +38,62 @@ class UserCreationForm(forms.ModelForm):
         return user
 
 
+class UserChangeForm(forms.ModelForm):
+    """Форма для редактирования пользователя"""
+    password = forms.CharField(
+        label='Пароль',
+        widget=forms.PasswordInput,
+        required=False,
+        help_text="Оставьте пустым, если не хотите менять пароль"
+    )
+
+    class Meta:
+        model = User
+        fields = (
+            'username', 'email', 'telegram', 'first_name', 'last_name', 
+            'surname', 'role', 'position', 'bio', 'avatar', 'is_active', 
+            'is_staff', 'is_superuser', 'groups', 'user_permissions'
+        )
+
+    def save(self, commit=True):
+        # Получаем пользователя из БД ДО любых изменений (если это редактирование)
+        if self.instance.pk:
+            db_user = User.objects.get(pk=self.instance.pk)
+            original_password = db_user.password
+        else:
+            original_password = None
+        
+        # Используем стандартный super().save() но с commit=False
+        user = super().save(commit=False)
+        
+        # Обновляем пароль только если он был введён
+        password_input = self.cleaned_data.get('password')
+        if password_input and password_input.strip():  # Проверяем что это не пустая строка
+            user.set_password(password_input)
+        elif original_password:
+            # Если пароль не введён, восстанавливаем оригинальный из БД
+            user.password = original_password
+        
+        if commit:
+            user.save()
+            # Логирование изменения пароля
+            try:
+                if original_password and original_password != user.password:
+                    logger.info(f"User(id={user.pk}, username={user.username}) password changed in admin.")
+            except Exception:
+                pass
+        
+        return user
+
+    def save_m2m(self):
+        """Сохраняем M2M поля - вызывается автоматически django.admin при save_related."""
+        super().save_m2m()
+
+
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
     add_form = UserCreationForm
+    form = UserChangeForm
     
     list_display = (
         "username",
@@ -255,27 +312,26 @@ class UserAdmin(BaseUserAdmin):
     
     # Настройка формы редактирования
     def get_form(self, request, obj=None, **kwargs):
-        form = super().get_form(request, obj, **kwargs)
+        """Используем разные формы для создания и редактирования"""
+        if obj is None:
+            # Для создания нового пользователя
+            kwargs['form'] = self.add_form
+        else:
+            # Для редактирования существующего
+            kwargs['form'] = self.form
         
-        # Делаем поле пароля необязательным при редактировании
-        if obj:
-            form.base_fields['password'].required = False
-            form.base_fields['password'].help_text = _(
-                "Оставьте пустым, если не хотите менять пароль. "
-                "Для смены пароля введите новый пароль."
-            )
-        
-        return form
+        return super().get_form(request, obj, **kwargs)
     
     # Сохранение пользователя
     def save_model(self, request, obj, form, change):
+        """Сохранение пользователя"""
         if not change:
-            # При создании нового пользователя
-            if 'password' in form.cleaned_data and form.cleaned_data['password']:
-                obj.set_password(form.cleaned_data['password'])
+            # Создание нового пользователя - UserCreationForm обработает всё
+            form.save()
         else:
-            # При обновлении существующего пользователя
-            if 'password' in form.cleaned_data and form.cleaned_data['password']:
-                obj.set_password(form.cleaned_data['password'])
-        
-        super().save_model(request, obj, form, change)
+            # Редактирование - UserChangeForm обработает пароль и m2m
+            form.save()
+            
+            # Обновляем сессию если администратор менял свой пароль
+            if bool(form.cleaned_data.get('password')) and request.user.pk == form.instance.pk:
+                update_session_auth_hash(request, form.instance)

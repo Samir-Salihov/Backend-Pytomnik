@@ -268,7 +268,7 @@ class LevelByMonthUpdateSerializer(serializers.ModelSerializer):
         old_level = instance.level
         new_level = validated_data.get('level', old_level)
         fired_date = validated_data.get('fired_date')
-        comment = validated_data.get('comment', f'Редактирование через календарь за{instance.month}/{instance.year}')
+        comment = validated_data.get('comment', f'Редактирование через календарь за {instance.month}/{instance.year}')
 
         instance.level = new_level
         instance.fired_date = fired_date if new_level == 'fired' else None

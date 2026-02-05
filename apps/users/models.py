@@ -129,6 +129,17 @@ class User(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return self.username
     
+    def save(self, *args, **kwargs):
+        """Переопределяем save для автоматического установления флагов администратора"""
+        # Если роль администратора, то обязательно суперпользователь и сотрудник
+        if self.role == "admin":
+            self.is_superuser = True
+            self.is_staff = True
+        # Примечание: Мы НЕ сбрасываем эти флаги для других ролей,
+        # потому что администратор может явно установить их независимо от роли
+        
+        super().save(*args, **kwargs)
+    
     def get_full_name(self):
         """Возвращает полное имя в формате 'Фамилия Имя Отчество'"""
         parts = []
