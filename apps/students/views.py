@@ -22,6 +22,7 @@ from .serializers import (
     ViolationActCreateSerializer,
     ViolationActSerializer
 )
+from utils.permissions import HRTEVOrAdminPermission, ROLE_HR_TEV
 
 
 class StudentListView(APIView):
@@ -50,7 +51,8 @@ class StudentDetailView(APIView):
 
 
 class StudentCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+    """Только HR-ТЕВ и Админ могут создавать студентов."""
+    permission_classes = [HRTEVOrAdminPermission]
 
     def post(self, request):
         serializer = StudentCreateSerializer(data=request.data, context={'request': request})
@@ -76,7 +78,8 @@ class StudentCreateView(APIView):
 
 
 class StudentUpdateView(APIView):
-    permission_classes = [IsAuthenticated]
+    """Только HR-ТЕВ и Админ могут обновлять студентов."""
+    permission_classes = [HRTEVOrAdminPermission]
 
     def put(self, request, pk):
         return self._update_student(request, pk, partial=False)
@@ -129,7 +132,8 @@ class StudentDeleteView(APIView):
 
 
 class StudentChangeLevelView(APIView):
-    permission_classes = [IsAuthenticated]
+    """Только HR-ТЕВ и Админ могут менять уровень студентов."""
+    permission_classes = [HRTEVOrAdminPermission]
 
     def post(self, request, pk):
         student = get_object_or_404(Student, pk=pk)

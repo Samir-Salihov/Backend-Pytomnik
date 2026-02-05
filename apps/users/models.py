@@ -28,9 +28,7 @@ class CustomUserManager(BaseUserManager):
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
         extra_fields.setdefault("is_active", True)
-        extra_fields.setdefault("role", "admin")
-        
-            
+        # role теперь обязательное поле — не присваиваем значение по умолчанию
         return self.create_user(username, password, **extra_fields)
 
 
@@ -70,12 +68,14 @@ class User(AbstractBaseUser, PermissionsMixin):
         _("Роль"),
         max_length=20,
         choices=[
-            ("hr", "HR"),
             ("med", "Медслужба"),
-            ("saok", "САОК"),
-            ("admin", "Админ")
+            ("admin", "Админ"),
+            ("hr_tev", "HR-ТЕВ"),
+            ("hr_corp", "HR-Корп.Развитие"),
+            ("hr_ac", "HR- AC"),
         ],
-        default="hr",
+        blank=False,
+        null=False,
     )
     
     position = models.CharField(
@@ -118,7 +118,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     objects = CustomUserManager()
 
     USERNAME_FIELD = "username"
-    REQUIRED_FIELDS = []
+    # role обязательное поле — добавим в REQUIRED_FIELDS чтобы createsuperuser запрашивал его
+    REQUIRED_FIELDS = ["role"]
 
     class Meta:
         verbose_name = _("Пользователь")
@@ -165,3 +166,24 @@ class User(AbstractBaseUser, PermissionsMixin):
         # Приведение telegram к нижнему регистру
         if self.telegram:
             self.telegram = self.telegram.lower()
+
+    # Удобные свойства для проверки ролей во всём проекте
+    @property
+    def is_med(self):
+        return self.role == "med" or self.is_superuser
+
+    @property
+    def is_admin_role(self):
+        return self.role == "admin" or self.is_superuser
+
+    @property
+    def is_hr_tev(self):
+        return self.role == "hr_tev" or self.is_superuser
+
+    @property
+    def is_hr_corp(self):
+        return self.role == "hr_corp" or self.is_superuser
+
+    @property
+    def is_hr_ac(self):
+        return self.role == "hr_ac" or self.is_superuser

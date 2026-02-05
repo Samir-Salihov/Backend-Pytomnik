@@ -7,10 +7,21 @@ from rest_framework import status
 from .models import KanbanBoard, StudentKanbanCard, KanbanColumn
 from .serializers import KanbanBoardSerializer, KanbanBoardCreateSerializer
 from apps.students.models import Student, LevelHistory
+from utils.permissions import (
+    HRTEVOrAdminPermission,
+    HRCorpOrTEVPermission,
+    HRACOrTEVPermission,
+    ROLE_HR_TEV,
+)
 
 
 class KanbanBoardDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    """
+    HR-ТЕВ: полный доступ (чтение + просмотр карточек)
+    HR-Корп.Развитие: чтение только для AS/Patriots + College (без просмотра карточки, без изменения уровня)
+    HR-AC: чтение только для AS/Patriots (без просмотра карточки, без изменения уровня)
+    """
+    permission_classes = [HRTEVOrAdminPermission]
 
     def get(self, request, board_id):
         board = get_object_or_404(
@@ -22,10 +33,22 @@ class KanbanBoardDetailView(APIView):
 
 
 class MoveCardView(APIView):
-    permission_classes = [IsAuthenticated]
+    """
+    Только HR-ТЕВ может перемещать карточки (менять уровень).
+    HR-Корп.Развитие и HR-AC не могут менять уровень.
+    """
+    permission_classes = [HRTEVOrAdminPermission]
 
     @transaction.atomic
     def post(self, request):
+        # Проверяем, что только HR-ТЕВ или Админ могут менять уровень
+        user = request.user
+        if not user.is_superuser and getattr(user, "role", None) != ROLE_HR_TEV:
+            return Response(
+                {"success": False, "message": "Только HR-ТЕВ могут менять уровень"}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
         card_id = request.data.get("cardId")
         column_id = request.data.get("columnId")
         position = request.data.get("position", 0)
@@ -46,6 +69,7 @@ class MoveCardView(APIView):
 
 
 class KanbanBoardCreateView(APIView):
+    """Только Админ может создавать доски."""
     permission_classes = [IsAdminUser]
 
     def post(self, request):

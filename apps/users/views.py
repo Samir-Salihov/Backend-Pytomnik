@@ -14,6 +14,7 @@ from .serializers import (
 )
 from django.db.models import Case, When, Value, IntegerField
 from .models import User
+from utils.permissions import AdminOrSuperuserPermission, HRTEVOrAdminPermission
 
 
 # ЛОГИН
@@ -23,7 +24,7 @@ class CustomLoginView(TokenObtainPairView):
 
 # РЕГИСТРАЦИЯ (только админ)
 class RegisterView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [AdminOrSuperuserPermission]
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
@@ -93,32 +94,29 @@ class ChangePasswordView(APIView):
 
 # СПИСОК ПОЛЬЗОВАТЕЛЕЙ
 class UserListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [HRTEVOrAdminPermission]
     
     def get(self, request):
-        # Проверяем права доступа (только админ и HR могут видеть всех пользователей)
-        if request.user.role not in ['admin', 'hr']:
-            return Response(
-                {"error": "Доступ запрещен. Требуется роль admin или hr"},
-                status=status.HTTP_403_FORBIDDEN
-            )
+        # Проверяем права доступа (админ и HR-ТЕВ могут видеть всех пользователей)
         
         # Определяем порядок сортировки ролей
         role_order = {
             'admin': 1,
-            'hr': 2,
-            'saok': 3,
-            'med': 4
+            'hr_tev': 2,
+            'hr_corp': 3,
+            'hr_ac': 4,
+            'med': 5
         }
         
         # Аннотируем пользователей числовым значением для сортировки
         users = User.objects.annotate(
             role_order=Case(
                 When(role='admin', then=Value(1)),
-                When(role='hr', then=Value(2)),
-                When(role='saok', then=Value(3)),
-                When(role='med', then=Value(4)),
-                default=Value(5),
+                When(role='hr_tev', then=Value(2)),
+                When(role='hr_corp', then=Value(3)),
+                When(role='hr_ac', then=Value(4)),
+                When(role='med', then=Value(5)),
+                default=Value(6),
                 output_field=IntegerField()
             )
         ).order_by('role_order', 'last_name', 'first_name')
@@ -128,14 +126,16 @@ class UserListView(APIView):
         # Форматируем ответ с группировкой по ролям
         grouped_users = {
             'admin': [],
-            'hr': [],
-            'saok': [],
+            'hr_tev': [],
+            'hr_corp': [],
+            'hr_ac': [],
             'med': []
         }
         
         for user_data in serializer.data:
             role = user_data['role']
-            grouped_users[role].append(user_data)
+            if role in grouped_users:
+                grouped_users[role].append(user_data)
         
         return Response({
             'count': users.count(),
@@ -146,7 +146,7 @@ class UserListView(APIView):
 
 # Детальная информация о пользователе и управление (только для админа)
 class UserDetailView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [AdminOrSuperuserPermission]
     parser_classes = [MultiPartParser, JSONParser]
     
     def get(self, request, pk):
@@ -170,7 +170,7 @@ class UserDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
         
-        serializer = UserUpdateSerializer(user, data=request.data)
+        serializer = UserUpdateSerializer(user, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
             return Response({
@@ -213,7 +213,7 @@ class UserDetailView(APIView):
 
 # Активация пользователя (только админ)
 class ActivateUserView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [AdminOrSuperuserPermission]
     
     def post(self, request, pk):
         try:
@@ -241,7 +241,7 @@ class UsersByRoleView(APIView):
     
     def get(self, request, role):
         # Проверяем, что роль существует
-        valid_roles = ['admin', 'hr', 'saok', 'med']
+        valid_roles = ['admin', 'hr_tev', 'hr_corp', 'hr_ac', 'med']
         if role not in valid_roles:
             return Response(
                 {"error": f"Неверная роль. Допустимые значения: {', '.join(valid_roles)}"},
@@ -250,11 +250,12 @@ class UsersByRoleView(APIView):
         
         # Проверяем права доступа
         user_role = request.user.role
-        if user_role not in ['admin', 'hr'] and user_role != role:
-            return Response(
-                {"error": "Вы можете видеть только пользователей своей роли"},
-                status=status.HTTP_403_FORBIDDEN
-            )
+        if user_role not in ['admin'] and user_role != role:
+            if not request.user.is_superuser:
+                return Response(
+                    {"error": "Вы можете видеть только пользователей своей роли или быть администратором"},
+                    status=status.HTTP_403_FORBIDDEN
+                )
         
         users = User.objects.filter(role=role, is_active=True).order_by('last_name', 'first_name')
         serializer = UserListSerializer(users, many=True)
