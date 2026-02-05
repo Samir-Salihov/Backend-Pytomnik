@@ -18,6 +18,7 @@ LEVEL_CHOICES = [
     ('yellow', 'Жёлтый'),
     ('green', 'Зелёный'),
     ('fired', 'Уволен'),
+    ('', 'Без уровня'),
 ]
 
 STATUS_CHOICES = [

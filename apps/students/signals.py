@@ -16,6 +16,7 @@ LEVEL_CHOICES_DICT = dict([
     ('yellow', 'Жёлтый уровень'),
     ('green', 'Зелёный уровень'),
     ('fired', 'Уволен'),
+    ('', 'Без уровня'),
 ])
 
 YEARS = range(2023, 2027)
@@ -182,10 +183,10 @@ def sync_kanban_card_and_hr_call(sender, instance, created, **kwargs):
 
     target_column, _ = KanbanColumn.objects.get_or_create(
         board=target_board,
-        level=instance.level or 'fired',
+        level=instance.level or '',  
         defaults={
-            'title': LEVEL_CHOICES_DICT.get(instance.level or 'fired', 'Уволен'),
-            'color': '#6B7280' if instance.level == 'fired' else '#000000',
+            'title': LEVEL_CHOICES_DICT.get(instance.level or '', 'Без уровня'),
+            'color': '#9CA3AF' if instance.level == '' else '#6B7280' if instance.level == 'fired' else '#000000', 
             'position': KanbanColumn.objects.filter(board=target_board).count() + 1
         }
     )

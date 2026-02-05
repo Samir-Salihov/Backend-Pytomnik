@@ -145,6 +145,7 @@ class StudentAdmin(admin.ModelAdmin):
                         'Жёлтый': 'yellow', 'желтый': 'yellow',
                         'Зелёный': 'green', 'зеленый': 'green',
                         'Уволен': 'fired', 'уволен': 'fired',
+                        'Без уровня': '', 'без уровня': '',
                     }
                     kvazar_map = {
                         'Сержант': 'sergeant',
@@ -364,6 +365,7 @@ class StudentAdmin(admin.ModelAdmin):
 
         super().save_model(request, obj, form, change)
 
+    
     def level_calendar_preview(self, obj):
         if not obj.pk:
             return "Сохраните студента для просмотра календаря"
@@ -389,12 +391,14 @@ class StudentAdmin(admin.ModelAdmin):
                 lbm = obj.level_by_month.filter(year=year, month=month).first()
                 is_current_month = is_current_year and month == current_month
                 cell_style = 'background: #e8f5e8;' if is_current_month else ''
-                if lbm and lbm.level:
+                if lbm and lbm.level is not None:  # level может быть '' (Без уровня)
                     display = lbm.get_level_display()
                     if lbm.level == 'fired' and lbm.fired_date:
                         display += f"<br><small>({lbm.fired_date.strftime('%d.%m.%Y')})</small>"
                     changes = f"<br><small>({lbm.change_count} изм.)</small>" if lbm.change_count > 1 else ""
-                    html += f'<td style="border: 1px solid #ddd; padding: 8px; text-align: center; {cell_style}">{display}{changes}</td>'
+                    # Специальный цвет для "Без уровня" (серый фон)
+                    cell_bg = 'background: #e5e7eb;' if lbm.level == '' else ''
+                    html += f'<td style="border: 1px solid #ddd; padding: 8px; text-align: center; {cell_style} {cell_bg}">{display}{changes}</td>'
                 else:
                     html += f'<td style="border: 1px solid #ddd; padding: 8px; text-align: center; color: #999; {cell_style}">—</td>'
             html += '</tr>'
@@ -404,12 +408,14 @@ class StudentAdmin(admin.ModelAdmin):
         html += '• Текущий год — жёлтым фоном строки.<br>'
         html += '• Редактируйте уровни в таблице "Level by month" ниже.<br>'
         html += '• Для уровня «Уволен» обязательна дата увольнения.<br>'
-        html += '• Наследование «Уволен» на последующие месяцы происходит автоматически.'
+        html += '• Наследование «Уволен» на последующие месяцы происходит автоматически.<br>'
+        html += '• «Без уровня» отображается серым фоном.'
         html += '</p>'
         html += '</div>'
         return mark_safe(html)
     level_calendar_preview.short_description = "Календарь уровней"
 
+    
     def fired_date_preview(self, obj):
         if obj.fired_date:
             return obj.fired_date.strftime('%d.%m.%Y')
@@ -453,7 +459,8 @@ class StudentAdmin(admin.ModelAdmin):
             'red': 'bg-danger text-white',
             'yellow': 'bg-warning text-dark',
             'green': 'bg-success text-white',
-            'fired': 'bg-secondary text-white'
+            'fired': 'bg-secondary text-white',
+            '': 'bg-gray-500 text-white',
         }
         color = colors.get(obj.level, 'bg-secondary text-white')
         display = obj.get_level_display()

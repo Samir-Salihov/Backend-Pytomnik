@@ -9,7 +9,8 @@ LEVEL_CHOICES = [
     ('red', 'Красный уровень'),
     ('yellow', 'Жёлтый уровень'),
     ('green', 'Зелёный уровень'),
-    ('fired', 'Уволен'),  # новая колонка
+    ('fired', 'Уволен'),
+    ('', 'Без уровня'),
 ]
 
 COLOR_CHOICES = [
@@ -17,7 +18,8 @@ COLOR_CHOICES = [
     ('#ef4444', 'Красный'),
     ('#eab308', 'Жёлтый'),
     ('#22c55e', 'Зелёный'),
-    ('#6B7280', 'Серый'),  # для уволенных
+    ('#6B7280', 'Серый'),
+    ("#662374", 'Фиолетовый'),
 ]
 
 class KanbanBoard(models.Model):
@@ -104,6 +106,9 @@ class StudentKanbanCard(models.Model):
         if self.column.level == 'fired':
             status = 'fired'
             level = 'fired'
+        elif self.column.level == '':  # Без уровня
+            status = 'active'
+            level = ''
         else:
             status = 'active'
             level = self.column.level
