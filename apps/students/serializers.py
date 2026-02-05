@@ -3,6 +3,14 @@ from apps.kanban.models import StudentKanbanCard
 from .models import LevelByMonth, Student, LevelHistory, Comment, MedicalFile, ViolationAct
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from utils.exceptions import (
+    InvalidAgeException, InvalidPhoneException, InvalidNameException,
+    InvalidBirthDateException, InvalidFiredDateException, StudentNotFoundException
+)
+from utils.validators import (
+    validate_birth_date, validate_phone_number, validate_first_name,
+    validate_last_name, validate_patronymic
+)
 
 User = get_user_model()
 
@@ -84,6 +92,78 @@ class StudentCreateSerializer(serializers.ModelSerializer):
             'fio_parent': {'required': True},
         }
 
+    def validate_first_name(self, value):
+        """Валидирует имя студента"""
+        try:
+            validate_first_name(value)
+        except Exception as e:
+            raise serializers.ValidationError(str(e))
+        return value
+
+    def validate_last_name(self, value):
+        """Валидирует фамилию студента"""
+        try:
+            validate_last_name(value)
+        except Exception as e:
+            raise serializers.ValidationError(str(e))
+        return value
+
+    def validate_patronymic(self, value):
+        """Валидирует отчество студента (опциональное)"""
+        try:
+            validate_patronymic(value)
+        except Exception as e:
+            raise serializers.ValidationError(str(e))
+        return value
+
+    def validate_birth_date(self, value):
+        """Валидирует дату рождения"""
+        try:
+            validate_birth_date(value)
+        except Exception as e:
+            raise serializers.ValidationError(str(e))
+        return value
+
+    def validate_phone_personal(self, value):
+        """Валидирует личный номер телефона"""
+        try:
+            validate_phone_number(value)
+        except Exception as e:
+            raise serializers.ValidationError(str(e))
+        return value
+
+    def validate_phone_parent(self, value):
+        """Валидирует номер телефона родителя"""
+        try:
+            validate_phone_number(value)
+        except Exception as e:
+            raise serializers.ValidationError(str(e))
+        return value
+
+    def validate_fio_parent(self, value):
+        """Валидирует ФИО родителя"""
+        if value and not str(value).strip():
+            raise serializers.ValidationError("ФИО родителя не может быть пустым")
+        if value and len(str(value)) > 200:
+            raise serializers.ValidationError("ФИО родителя не может быть длиннее 200 символов")
+        return value
+
+    def validate(self, attrs):
+        """Комплексная валидация данных"""
+        # Проверка возраста
+        birth_date = attrs.get('birth_date')
+        if birth_date:
+            from dateutil.relativedelta import relativedelta
+            today = timezone.now().date()
+            delta = relativedelta(today, birth_date)
+            age = delta.years
+            if age > 30:
+                raise serializers.ValidationError(
+                    {"birth_date": "Возраст студента не может быть больше 30 лет"}
+                )
+        
+        return attrs
+
     def create(self, validated_data):
         request = self.context.get('request')
         student = Student.objects.create(
@@ -104,13 +184,82 @@ class StudentUpdateSerializer(serializers.ModelSerializer):
             'fired_date', 'photo',   # ← добавлено: теперь дата увольнения редактируемая через API
         ]
 
+    def validate_first_name(self, value):
+        """Валидирует имя студента"""
+        if value:
+            try:
+                validate_first_name(value)
+            except Exception as e:
+                raise serializers.ValidationError(str(e))
+        return value
+
+    def validate_last_name(self, value):
+        """Валидирует фамилию студента"""
+        if value:
+            try:
+                validate_last_name(value)
+            except Exception as e:
+                raise serializers.ValidationError(str(e))
+        return value
+
+    def validate_patronymic(self, value):
+        """Валидирует отчество студента (опциональное)"""
+        if value:
+            try:
+                validate_patronymic(value)
+            except Exception as e:
+                raise serializers.ValidationError(str(e))
+        return value
+
+    def validate_birth_date(self, value):
+        """Валидирует дату рождения"""
+        if value:
+            try:
+                validate_birth_date(value)
+            except Exception as e:
+                raise serializers.ValidationError(str(e))
+        return value
+
+    def validate_phone_personal(self, value):
+        """Валидирует личный номер телефона"""
+        if value:
+            try:
+                validate_phone_number(value)
+            except Exception as e:
+                raise serializers.ValidationError(str(e))
+        return value
+
+    def validate_phone_parent(self, value):
+        """Валидирует номер телефона родителя"""
+        if value:
+            try:
+                validate_phone_number(value)
+            except Exception as e:
+                raise serializers.ValidationError(str(e))
+        return value
+
     def validate(self, attrs):
+        """Комплексная валидация данных"""
         level = attrs.get('level', self.instance.level) if self.instance else attrs.get('level')
         fired_date = attrs.get('fired_date')
 
         # Запрет: дата увольнения только если уровень 'fired'
         if fired_date and level != 'fired':
-            raise serializers.ValidationError("Дата увольнения может быть указана только для уровня 'Уволен'")
+            raise serializers.ValidationError({
+                "fired_date": "Дата увольнения может быть указана только для уровня 'Уволен'"
+            })
+
+        # Проверка возраста при изменении даты рождения
+        birth_date = attrs.get('birth_date')
+        if birth_date:
+            from dateutil.relativedelta import relativedelta
+            today = timezone.now().date()
+            delta = relativedelta(today, birth_date)
+            age = delta.years
+            if age > 30:
+                raise serializers.ValidationError({
+                    "birth_date": "Возраст студента не может быть больше 30 лет"
+                })
 
         return attrs
 

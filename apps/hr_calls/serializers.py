@@ -1,5 +1,12 @@
 from rest_framework import serializers
 from .models import HrCall, HrComment, HrFile
+from django.utils import timezone
+from utils.exceptions import (
+    MissingStudentException, MissingFullNameException,
+    InvalidPersonTypeException, AutomaticHrCallException,
+    InvalidYearException, InvalidVisitDatetimeException
+)
+from utils.validators import validate_year, validate_datetime_not_future
 
 
 class HrCommentSerializer(serializers.ModelSerializer):
@@ -51,11 +58,62 @@ class HrCallCreateSerializer(serializers.ModelSerializer):
         model = HrCall
         fields = ['person_type', 'student', 'full_name', 'reason', 'solution', 'visit_datetime']
 
+    def validate_person_type(self, value):
+        """Валидирует тип лица"""
+        if value not in ['student', 'college']:
+            raise InvalidPersonTypeException(
+                "Тип лица должен быть 'student' (кот) или 'college' (колледжист)"
+            )
+        return value
+
+    def validate_full_name(self, value):
+        """Валидирует ФИО"""
+        if value and not str(value).strip():
+            raise serializers.ValidationError("ФИО не может быть пустым")
+        if value and len(str(value)) > 200:
+            raise serializers.ValidationError("ФИО не может быть длиннее 200 символов")
+        return value
+
+    def validate_reason(self, value):
+        """Валидирует причину вызова """
+        if value and len(str(value)) > 2000:
+            raise serializers.ValidationError("Причина не может быть длиннее 2000 символов")
+        return value
+
+    def validate_solution(self, value):
+        """Валидирует решение"""
+        if value and len(str(value)) > 2000:
+            raise serializers.ValidationError("Решение не может быть длиннее 2000 символов")
+        return value
+
+    def validate_visit_datetime(self, value):
+        """Валидирует дату и время посещения"""
+        if value:
+            try:
+                validate_datetime_not_future(value)
+            except Exception as e:
+                raise serializers.ValidationError(str(e))
+        return value
+
     def validate(self, attrs):
-        if attrs['person_type'] == 'student':
-            raise serializers.ValidationError({"person_type": "Для котов вызов создаётся автоматически при смене статуса. Не создавайте вручную."})
-        if attrs['person_type'] == 'college' and not attrs.get('full_name'):
-            raise serializers.ValidationError({"full_name": "Для типа 'college' укажите ФИО"})
+        """Комплексная валидация"""
+        person_type = attrs.get('person_type')
+        student = attrs.get('student')
+        full_name = attrs.get('full_name')
+        
+        # Проверка для типа 'student'
+        if person_type == 'student':
+            raise AutomaticHrCallException(
+                "Для студентов вызовы создаются автоматически при смене статуса. "
+                "Не создавайте вызовы вручную для студентов."
+            )
+        
+        # Проверка для типа 'college'
+        if person_type == 'college' and not full_name:
+            raise MissingFullNameException(
+                "Для типа 'college' (колледжист) необходимо указать ФИО"
+            )
+        
         return attrs
 
     def create(self, validated_data):
@@ -65,6 +123,8 @@ class HrCallCreateSerializer(serializers.ModelSerializer):
 
 
 class HrCallUpdateSerializer(serializers.ModelSerializer):
+    """Сериализатор для обновления вызова к HR"""
+    
     class Meta:
         model = HrCall
         fields = [
@@ -79,6 +139,27 @@ class HrCallUpdateSerializer(serializers.ModelSerializer):
             'visit_datetime': {'required': False, 'allow_null': True},
             'problem_resolved': {'required': False}
         }
+
+    def validate_reason(self, value):
+        """Валидирует причину вызова"""
+        if value and len(str(value)) > 2000:
+            raise serializers.ValidationError("Причина не может быть длиннее 2000 символов")
+        return value
+
+    def validate_solution(self, value):
+        """Валидирует решение"""
+        if value and len(str(value)) > 2000:
+            raise serializers.ValidationError("Решение не может быть длиннее 2000 символов")
+        return value
+
+    def validate_visit_datetime(self, value):
+        """Валидирует дату и время посещения"""
+        if value:
+            try:
+                validate_datetime_not_future(value)
+            except Exception as e:
+                raise serializers.ValidationError(str(e))
+        return value
 
     def update(self, instance, validated_data):
         # Обновляем поля, которые пришли в запросе

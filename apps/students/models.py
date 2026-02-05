@@ -6,6 +6,11 @@ from dateutil.relativedelta import relativedelta
 import logging
 
 from utils import student_utils
+from utils.validators import (
+    validate_birth_date, validate_phone_number, 
+    validate_first_name, validate_last_name, validate_patronymic
+)
+from utils.exceptions import InvalidAgeException, InvalidPhoneException, InvalidNameException
 
 
 logger = logging.getLogger(__name__)
@@ -145,13 +150,54 @@ class Student(models.Model):
         return delta.years
 
     def clean(self):
-        if self.birth_date:
-            age = self.age
-            if age is not None and (age < 14 or age > 30):
-                raise ValidationError("Возраст должен быть от 14 до 30 лет")
-
+        """Комплексная валидация данных студента"""
+        errors = {}
+        
+        # Валидат имена
+        try:
+            if self.first_name:
+                validate_first_name(self.first_name)
+        except (ValidationError, InvalidNameException) as e:
+            errors['first_name'] = str(e)
+        
+        try:
+            if self.last_name:
+                validate_last_name(self.last_name)
+        except (ValidationError, InvalidNameException) as e:
+            errors['last_name'] = str(e)
+        
+        try:
+            if self.patronymic:
+                validate_patronymic(self.patronymic)
+        except (ValidationError, InvalidNameException) as e:
+            errors['patronymic'] = str(e)
+        
+        # Валидация даты рождения
+        try:
+            if self.birth_date:
+                validate_birth_date(self.birth_date)
+        except (ValidationError, InvalidAgeException) as e:
+            errors['birth_date'] = str(e)
+        
+        # Валидация телефонов
+        try:
+            if self.phone_personal:
+                validate_phone_number(self.phone_personal)
+        except (ValidationError, InvalidPhoneException) as e:
+            errors['phone_personal'] = str(e)
+        
+        try:
+            if self.phone_parent:
+                validate_phone_number(self.phone_parent)
+        except (ValidationError, InvalidPhoneException) as e:
+            errors['phone_parent'] = str(e)
+        
+        # Валидация даты увольнения
         if self.fired_date and self.level != 'fired':
-            raise ValidationError("Вы не можете указать дату увольнения, если кот не уволен")
+            errors['fired_date'] = "Дата увольнения может быть указана только для уровня 'Уволен'"
+        
+        if errors:
+            raise ValidationError(errors)
 
     def save(self, *args, **kwargs):
         if self.pk and kwargs.get('request'):

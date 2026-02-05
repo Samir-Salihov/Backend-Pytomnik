@@ -3,6 +3,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from apps.students.models import Student
+from utils.validators import validate_datetime_not_future
 
 User = get_user_model()
 
@@ -73,10 +74,44 @@ class HrCall(models.Model):
         return f"Вызов {name} к HR ({self.reason[:50]}...)"
 
     def clean(self):
+        """Комплексная валидация вызова к HR"""
+        errors = {}
+        
+        # Валидация типа лица
+        if self.person_type not in ['student', 'college']:
+            errors['person_type'] = "Тип лица должен быть 'student' или 'college'"
+        
+        # Валидация для типа 'student'
         if self.person_type == 'student' and not self.student:
-            raise ValidationError("Для типа 'student' необходимо указать кота")
+            errors['student'] = "Для типа 'student' необходимо указать студента"
+        
+        # Валидация для типа 'college'
         if self.person_type == 'college' and not self.full_name:
-            raise ValidationError("Для типа 'college' необходимо указать ФИО")
+            errors['full_name'] = "Для типа 'college' необходимо указать ФИО"
+        
+        # Валидация ФИО для колледжистов
+        if self.person_type == 'college' and self.full_name:
+            if len(str(self.full_name).strip()) < 5:
+                errors['full_name'] = "ФИО должно содержать минимум 5 символов"
+            if len(str(self.full_name)) > 200:
+                errors['full_name'] = "ФИО не может быть длиннее 200 символов"
+        
+        # Валидация дата и время посещения
+        if self.visit_datetime:
+            try:
+                validate_datetime_not_future(self.visit_datetime)
+            except ValidationError as e:
+                errors['visit_datetime'] = str(e)
+        
+        # Валидация разница между текущего времени и visit_datetime не более 365 дней
+        if self.visit_datetime:
+            now = timezone.now()
+            min_date = now - timezone.timedelta(days=365)
+            if self.visit_datetime < min_date:
+                errors['visit_datetime'] = "Дата посещения не может быть раньше чем 1 год назад"
+        
+        if errors:
+            raise ValidationError(errors)
 
     def save(self, *args, **kwargs):
         if self.person_type == 'student' and self.student:

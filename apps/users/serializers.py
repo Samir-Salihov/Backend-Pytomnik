@@ -3,6 +3,11 @@ from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .models import User
 from django.contrib.auth.password_validation import validate_password
+from utils.exceptions import (
+    PasswordMismatchException, InvalidTelegramException,
+    MissingContactInfoException, UserAlreadyExistsException,
+    InvalidPasswordException
+)
 
 
 # === ЛОГИН ===
@@ -53,17 +58,70 @@ class RegisterSerializer(serializers.ModelSerializer):
             'position': {'required': False},
         }
 
+    def validate_username(self, value):
+        """Валидирует username"""
+        if not value or len(value.strip()) < 3:
+            raise serializers.ValidationError(
+                "Логин должен содержать минимум 3 символа"
+            )
+        if len(value) > 50:
+            raise serializers.ValidationError(
+                "Логин не может быть длиннее 50 символов"
+            )
+        if User.objects.filter(username=value).exists():
+            raise UserAlreadyExistsException(
+                f"Пользователь с логином '{value}' уже существует"
+            )
+        return value
+
+    def validate_email(self, value):
+        """Валидирует email"""
+        if value and User.objects.filter(email=value).exists():
+            raise UserAlreadyExistsException(
+                f"Пользователь с email '{value}' уже существует"
+            )
+        return value
+
+    def validate_telegram(self, value):
+        """Валидирует Telegram username"""
+        if value and not isinstance(value, str):
+            value = str(value)
+        
+        # Проверка формата Telegram username
+        import re
+        if value and not re.match(r'^[a-zA-Z0-9_]{5,32}$', value):
+            raise InvalidTelegramException(
+                "Имя пользователя должно содержать только латинские буквы, цифры и подчеркивания (5-32 символа)"
+            )
+        return value
+
+    def validate_password(self, value):
+        """Валидирует пароль"""
+        if len(value) < 8:
+            raise InvalidPasswordException(
+                "Пароль должен содержать минимум 8 символов"
+            )
+        return value
+
     def validate(self, attrs):
+        """Комплексная валидация регистрации"""
         # Проверка совпадения паролей
         if attrs["password"] != attrs["password2"]:
-            raise serializers.ValidationError({"password": "Пароли не совпадают"})
+            raise PasswordMismatchException(
+                "Пароли не совпадают"
+            )
         
         # Проверка, что указан хотя бы email или telegram
         if not attrs.get('email') and not attrs.get('telegram'):
-            raise serializers.ValidationError({
-                "email": "Укажите email или Telegram для связи",
-                "telegram": "Укажите email или Telegram для связи"
-            })
+            raise MissingContactInfoException(
+                "Укажите email или Telegram для связи"
+            )
+        
+        # Проверка role для суперпользователя (если создается системой)
+        if not attrs.get('role'):
+            raise serializers.ValidationError(
+                {"role": "Роль обязательна при регистрации"}
+            )
         
         return attrs
 

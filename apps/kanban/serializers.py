@@ -1,6 +1,10 @@
 from rest_framework import serializers
 from apps.students.models import Student
 from .models import KanbanBoard, KanbanColumn, StudentKanbanCard
+from utils.exceptions import (
+    DuplicatePositionException, InvalidColorException,
+    StudentCardAlreadyExistsException, IncompatibleCategoryBoardException
+)
 
 
 class StudentCardSerializer(serializers.ModelSerializer):
@@ -52,6 +56,39 @@ class KanbanColumnCreateSerializer(serializers.ModelSerializer):
         model = KanbanColumn
         fields = ['level', 'title', 'color', 'position']
 
+    def validate_level(self, value):
+        """Валидирует уровень"""
+        from .models import LEVEL_CHOICES
+        allowed_levels = [choice[0] for choice in LEVEL_CHOICES]
+        if value not in allowed_levels:
+            raise serializers.ValidationError(
+                f"Неверный уровень. Допустимые значения: {', '.join(allowed_levels)}"
+            )
+        return value
+
+    def validate_color(self, value):
+        """Валидирует HEX цвет"""
+        import re
+        if not re.match(r'^#[0-9A-Fa-f]{6}$', value):
+            raise InvalidColorException(
+                "Цвет должен быть в формате #RRGGBB (например, #FF5733)"
+            )
+        return value
+
+    def validate_position(self, value):
+        """Валидирует позицию"""
+        if value < 0:
+            raise serializers.ValidationError("Позиция не может быть отрицательной")
+        return value
+
+    def validate_title(self, value):
+        """Валидирует название колонки"""
+        if not value or not str(value).strip():
+            raise serializers.ValidationError("Название колонки не может быть пустым")
+        if len(str(value)) > 100:
+            raise serializers.ValidationError("Название не может быть длиннее 100 символов")
+        return value
+
 
 class KanbanBoardCreateSerializer(serializers.ModelSerializer):
     columns = KanbanColumnCreateSerializer(many=True, required=False)
@@ -59,6 +96,24 @@ class KanbanBoardCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = KanbanBoard
         fields = ['id', 'title', 'columns']
+
+    def validate_id(self, value):
+        """Валидирует ID доски"""
+        if not value or not str(value).strip():
+            raise serializers.ValidationError("ID доски не может быть пустым")
+        if len(str(value)) > 50:
+            raise serializers.ValidationError("ID не может быть длиннее 50 символов")
+        if KanbanBoard.objects.filter(id=value).exists():
+            raise serializers.ValidationError(f"Доска с ID '{value}' уже существует")
+        return value
+
+    def validate_title(self, value):
+        """Валидирует название доски"""
+        if not value or not str(value).strip():
+            raise serializers.ValidationError("Название доски не может быть пустым")
+        if len(str(value)) > 200:
+            raise serializers.ValidationError("Название не может быть длиннее 200 символов")
+        return value
 
     def create(self, validated_data):
         columns_data = validated_data.pop('columns', [])
