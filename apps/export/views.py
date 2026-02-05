@@ -4,13 +4,14 @@ from django.http import HttpResponse
 from django.utils import timezone
 from io import BytesIO
 from apps.students.models import Student
+from utils.permissions import HRTEVOrAdminPermission
 from .models import ExportLog
 from .services import generate_excel_stream
 import pandas as pd
 
 
 class ExportStudentsExcelView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [HRTEVOrAdminPermission]
 
     def get(self, request):
         fmt = request.query_params.get("format", "excel").lower()

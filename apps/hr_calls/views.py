@@ -3,6 +3,8 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from django.shortcuts import get_object_or_404
 from rest_framework import status
+
+from utils.permissions import HRTEVOrAdminPermission
 from .models import HrCall, HrComment, HrFile
 from .serializers import (
     HrCallSerializer, HrCallCreateSerializer, HrCallUpdateSerializer,
@@ -12,7 +14,7 @@ from .serializers import (
 
 
 class HrCallListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [HRTEVOrAdminPermission]
 
     def get(self, request):
         calls = HrCall.objects.all().order_by('-created_at')
@@ -24,7 +26,7 @@ class HrCallListView(APIView):
 
 
 class HrCallDetailView(APIView):
-    permission_classes = [IsAuthenticated] 
+    permission_classes = [HRTEVOrAdminPermission] 
 
     def get(self, request, pk):
         call = get_object_or_404(HrCall, pk=pk)
@@ -76,7 +78,7 @@ class HrCallDetailView(APIView):
 
 
 class HrCallCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [HRTEVOrAdminPermission]
 
     def post(self, request):
         serializer = HrCallCreateSerializer(data=request.data, context={'request': request})
@@ -94,7 +96,7 @@ class HrCallCreateView(APIView):
 
 
 class HrCommentListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [HRTEVOrAdminPermission]
 
     def get(self, request, pk):
         call = get_object_or_404(HrCall, pk=pk)
@@ -107,7 +109,7 @@ class HrCommentListView(APIView):
 
 
 class HrCommentCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [HRTEVOrAdminPermission]
 
     def post(self, request, pk):
         call = get_object_or_404(HrCall, pk=pk)
@@ -129,7 +131,7 @@ class HrCommentCreateView(APIView):
 
 
 class HrCommentDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [HRTEVOrAdminPermission]
 
     def put(self, request, call_pk, pk):
         comment = get_object_or_404(HrComment, pk=pk, hr_call_id=call_pk)
@@ -172,7 +174,7 @@ class HrCommentDetailView(APIView):
 
 
 class HrFileListView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [HRTEVOrAdminPermission]
 
     def get(self, request, pk):
         call = get_object_or_404(HrCall, pk=pk)
@@ -185,7 +187,7 @@ class HrFileListView(APIView):
 
 
 class HrFileCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [HRTEVOrAdminPermission]
 
     def post(self, request, pk):
         call = get_object_or_404(HrCall, pk=pk)
@@ -204,7 +206,7 @@ class HrFileCreateView(APIView):
 
 
 class HrFileDeleteView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [HRTEVOrAdminPermission]
 
     def delete(self, request, call_pk, pk):
         file = get_object_or_404(HrFile, pk=pk, hr_call_id=call_pk)

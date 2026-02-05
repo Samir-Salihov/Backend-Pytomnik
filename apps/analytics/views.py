@@ -1,12 +1,14 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
+
+from utils.permissions import HRTEVOrAdminPermission
 from .models import AnalyticsSnapshot
 from apps.students.models import CATEGORY_CHOICES, Student
 
 
 class AnalyticsDashboardView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [HRTEVOrAdminPermission]
     def get(self, request):
         snapshot = AnalyticsSnapshot.get_or_create_snapshot()
         active_total = Student.objects.filter(status='active').exclude(level='fired').count() or 1
@@ -56,7 +58,7 @@ class AnalyticsDashboardView(APIView):
         }, status=200)
 
 class LevelDistributionView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [HRTEVOrAdminPermission]
     def get(self, request):
         snapshot = AnalyticsSnapshot.get_or_create_snapshot()
         active_total = Student.objects.filter(status='active').exclude(level='fired').count() or 1

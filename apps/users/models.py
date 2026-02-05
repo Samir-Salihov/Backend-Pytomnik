@@ -107,7 +107,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     
     # Системные поля
     is_active = models.BooleanField(_("Активен"), default=True)
-    is_staff = models.BooleanField(_("Сотрудник"), default=False)
+    is_staff = models.BooleanField(_("Админ"), default=False)
     date_joined = models.DateField(
         _("Дата регистрации"),
         auto_now_add=True,
@@ -135,8 +135,10 @@ class User(AbstractBaseUser, PermissionsMixin):
         if self.role == "admin":
             self.is_superuser = True
             self.is_staff = True
-        # Примечание: Мы НЕ сбрасываем эти флаги для других ролей,
-        # потому что администратор может явно установить их независимо от роли
+        else:
+            # Если роль НЕ администратора, то убираем эти флаги
+            self.is_superuser = False
+            self.is_staff = False
         
         super().save(*args, **kwargs)
     

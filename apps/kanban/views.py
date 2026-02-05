@@ -12,24 +12,49 @@ from utils.permissions import (
     HRCorpOrTEVPermission,
     HRACOrTEVPermission,
     ROLE_HR_TEV,
+    ROLE_HR_CORP,
+    ROLE_HR_AC,
+    ROLE_ADMIN,
+    ROLE_MED,
 )
 
 
 class KanbanBoardDetailView(APIView):
     """
     HR-ТЕВ: полный доступ (чтение + просмотр карточек)
-    HR-Корп.Развитие: чтение только для AS/Patriots + College (без просмотра карточки, без изменения уровня)
-    HR-AC: чтение только для AS/Patriots (без просмотра карточки, без изменения уровня)
+    HR-Корп.Развитие: просмотр карточек для досок polytech + start (без detail карточки, без изменения уровня)
+    HR-AC: просмотр карточек только для доски start (без detail карточки, без изменения уровня)
     """
-    permission_classes = [HRTEVOrAdminPermission]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, board_id):
         board = get_object_or_404(
             KanbanBoard.objects.prefetch_related('columns__cards__student'),
-            id=board_id  
+            id=board_id
         )
-        serializer = KanbanBoardSerializer(board)
-        return Response(serializer.data)
+
+        user = request.user
+
+        # full access for superuser, admin role and HR-TEV
+        if getattr(user, 'is_superuser', False) or getattr(user, 'role', None) in (ROLE_HR_TEV, ROLE_ADMIN):
+            serializer = KanbanBoardSerializer(board)
+            return Response(serializer.data)
+
+        # HR-Corp: can view boards 'polytech' and 'start' with cards visible (but cannot open card details)
+        if getattr(user, 'role', None) == ROLE_HR_CORP:
+            if board.id in ('polytech', 'start'):
+                serializer = KanbanBoardSerializer(board)
+                return Response(serializer.data)
+            return Response({'detail': 'Доступ запрещён', 'message': 'Вы не имеете прав на просмотр этой доски'}, status=status.HTTP_403_FORBIDDEN)
+
+        # HR-AC: can view only board 'start' with cards visible (but cannot open card details)
+        if getattr(user, 'role', None) == ROLE_HR_AC:
+            if board.id == 'start':
+                serializer = KanbanBoardSerializer(board)
+                return Response(serializer.data)
+            return Response({'detail': 'Доступ запрещён'}, status=status.HTTP_403_FORBIDDEN)
+
+        return Response({'detail': 'Доступ запрещён', 'message': 'Вы не имеете прав на просмотр этой доски'}, status=status.HTTP_403_FORBIDDEN)
 
 
 class MoveCardView(APIView):

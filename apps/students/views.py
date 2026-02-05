@@ -22,7 +22,7 @@ from .serializers import (
     ViolationActCreateSerializer,
     ViolationActSerializer
 )
-from utils.permissions import HRTEVOrAdminPermission, ROLE_HR_TEV
+from utils.permissions import HRTEVOrAdminPermission, ROLE_HR_TEV, ROLE_HR_CORP, ROLE_HR_AC
 
 
 class StudentListView(APIView):
@@ -42,6 +42,14 @@ class StudentDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, pk):
+        user = request.user
+        # HR-Corp и HR-AC не могут открывать detail карточек
+        if getattr(user, 'role', None) in (ROLE_HR_CORP, ROLE_HR_AC) and not getattr(user, 'is_superuser', False):
+            return Response(
+                {'detail': 'Доступ запрещён. Вы можете только просматривать доску с карточками'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
         student = get_object_or_404(Student, pk=pk)
         serializer = StudentDetailSerializer(student) 
         return Response({
