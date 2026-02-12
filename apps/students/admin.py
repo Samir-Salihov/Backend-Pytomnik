@@ -138,23 +138,42 @@ class StudentAdmin(admin.ModelAdmin):
                     created = 0
                     errors = []
 
-                    # Маппинги
+                    # Функция для нормализации строк (удаляет лишние пробелы и приводит к lowercase)
+                    def normalize_key(s):
+                        if not s:
+                            return ''
+                        return s.strip().lower()
+
+                    # Маппинги с нормализацией
+                    # Жёлтый, Желтый, желтый, жёлтый
                     level_map = {
-                        'Чёрный': 'black', 'черный': 'black', 'Чёрный уровень': 'black',
-                        'Красный': 'red', 'красный': 'red',
-                        'Жёлтый': 'yellow', 'желтый': 'yellow',
-                        'Зелёный': 'green', 'зеленый': 'green',
-                        'Уволен': 'fired', 'уволен': 'fired',
-                        'Без уровня': '', 'без уровня': '',
+                        # Чёрный уровень (все варианты)
+                        'черный': 'black',
+                        'чёрный': 'black',
+                        'черный уровень': 'black',
+                        'чёрный уровень': 'black',
+                        # Красный уровень (все варианты)
+                        'красный': 'red',
+                        # Жёлтый уровень (все варианты)
+                        'желтый': 'yellow',
+                        'жёлтый': 'yellow',
+                        # Зелёный уровень (все варианты)
+                        'зеленый': 'green',
+                        'зелёный': 'green',
+                        # Уволен (все варианты)
+                        'уволен': 'fired',
+                        # Без уровня (все варианты)
+                        'без уровня': '',
+                        'без уровня': '',
                     }
                     kvazar_map = {
-                        'Сержант': 'sergeant',
-                        'Рядовой': 'private',
-                        'Запас': 'reserve',
+                        'сержант': 'sergeant',
+                        'рядовой': 'private',
+                        'запас': 'reserve',
                     }
                     month_map = {
-                        'Январь': 1, 'Февраль': 2, 'Март': 3, 'Апрель': 4, 'Май': 5, 'Июнь': 6,
-                        'Июль': 7, 'Август': 8, 'Сентябрь': 9, 'Октябрь': 10, 'Ноябрь': 11, 'Декабрь': 12
+                        'январь': 1, 'февраль': 2, 'март': 3, 'апрель': 4, 'май': 5, 'июнь': 6,
+                        'июль': 7, 'август': 8, 'сентябрь': 9, 'октябрь': 10, 'ноябрь': 11, 'декабрь': 12
                     }
 
                     for idx, row in df.iterrows():
@@ -205,7 +224,7 @@ class StudentAdmin(admin.ModelAdmin):
                             data['olympiads_participation'] = safe_str(row.get('Участие в олимпиадах')) or None
 
                             kvazar = safe_str(row.get('Участие в Квазаре'))
-                            data['kvazar_rank'] = kvazar_map.get(kvazar) if kvazar else None
+                            data['kvazar_rank'] = kvazar_map.get(normalize_key(kvazar)) if kvazar else None
 
                             rating = row.get('Место в рейтинге')
                             if pd.notna(rating) and safe_str(rating):
@@ -231,10 +250,13 @@ class StudentAdmin(admin.ModelAdmin):
                             if data['phone_personal'] and Student.objects.filter(phone_personal=data['phone_personal']).exists():
                                 raise ValueError(f"Телефон {data['phone_personal']} уже используется")
 
-                            data['level'] = 'black'
+                            # Оставляем level пустым (без уровня по дефолту)
                             data['status'] = 'active'
 
                             student = Student.objects.create(**data)
+                            # Устанавливаем флаг чтобы не создавать История для импортированного студента
+                            student._is_import = True
+                            student.save()
 
                             # Календарь (только заполненные)
                             month_data = {}
@@ -245,14 +267,15 @@ class StudentAdmin(admin.ModelAdmin):
                                     parts = header.split()
                                     if len(parts) == 2:
                                         month_name, year_str = parts
-                                        if month_name in month_map and year_str.isdigit():
+                                        month_name_normalized = normalize_key(month_name)
+                                        if month_name_normalized in month_map and year_str.isdigit():
                                             year = int(year_str)
-                                            month = month_map[month_name]
+                                            month = month_map[month_name_normalized]
                                             if 2023 <= year <= 2026:
                                                 level_display = safe_str(row.get(col))
                                                 if level_display:
-                                                    level = level_map.get(level_display.lower())
-                                                    if level:
+                                                    level = level_map.get(normalize_key(level_display))
+                                                    if level is not None:  # Может быть level='' (Без уровня)
                                                         month_data[(year, month)] = {'level': level, 'fired_date': None}
 
                             for col in df.columns:

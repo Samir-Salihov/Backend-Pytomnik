@@ -25,12 +25,33 @@ def get_current_year_month():
     now = timezone.now()
     return now.year, now.month
 
-def update_level_by_month(student, level, fired_date=None, changed_by=None, comment=''):
+def initialize_level_calendar(student):
+    """Инициализирует весь календарь (2023-2026) с "Без уровня" для новых студентов"""
+    current_year, current_month = get_current_year_month()
+    for year in YEARS:
+        for month in range(1, 13):
+            # Не создаём для будущих месяцев текущего года или будущих лет
+            if year > current_year or (year == current_year and month > current_month):
+                continue
+            
+            LevelByMonth.objects.get_or_create(
+                student=student,
+                year=year,
+                month=month,
+                defaults={
+                    'level': '',  # Без уровня по умолчанию
+                    'fired_date': None,
+                    'last_changed_at': timezone.now(),
+                    'change_count': 0
+                }
+            )
+
+def update_level_by_month(student, level, fired_date=None, changed_by=None, comment='', create_history=True):
     year, month = get_current_year_month()
 
-    # Создаём запись в LevelHistory
+    # Создаём запись в LevelHistory (только если флаг разрешает)
     old_level = student.level
-    if old_level != level:
+    if old_level != level and create_history:
         LevelHistory.objects.create(
             student=student,
             old_level=old_level,
@@ -99,7 +120,7 @@ def clear_future_fired(student, start_year, start_month):
         for month in range(start_m, end_m + 1):
             lbm = LevelByMonth.objects.filter(student=student, year=year, month=month, level='fired').first()
             if lbm:
-                lbm.level = None
+                lbm.level = ''  # Изменяем на пустую строку (Без уровня)
                 lbm.fired_date = None
                 lbm.save()
 
@@ -124,9 +145,14 @@ def track_changes(sender, instance, **kwargs):
 def sync_kanban_card_and_hr_call(sender, instance, created, **kwargs):
     from apps.kanban.models import KanbanBoard, KanbanColumn, StudentKanbanCard
 
+    # Инициализируем весь календарь (2023-2026) с "Без уровня" при создании студента
+    if created:
+        initialize_level_calendar(instance)
+
     previous_level = getattr(instance, '_previous_level', None)
     previous_category = getattr(instance, '_previous_category', None)
     previous_is_called = getattr(instance, '_previous_is_called_to_hr', False)
+    is_import = getattr(instance, '_is_import', False)  # Флаг импорта
 
     category_changed = previous_category is not None and previous_category != instance.category
     level_changed = previous_level is not None and previous_level != instance.level
@@ -139,11 +165,12 @@ def sync_kanban_card_and_hr_call(sender, instance, created, **kwargs):
             level=instance.level,
             fired_date=instance.fired_date if instance.level == 'fired' else None,
             changed_by=instance.updated_by,
-            comment=getattr(instance, '_change_comment', '')
+            comment=getattr(instance, '_change_comment', ''),
+            create_history=not is_import  # Не создаём историю при импорте
         )
 
-    # 1. История уровней
-    if not created and level_changed:
+    # 1. История уровней (не создаём при импорте)
+    if not created and level_changed and not is_import:
         comment = getattr(instance, '_change_comment', '')
         LevelHistory.objects.create(
             student=instance,

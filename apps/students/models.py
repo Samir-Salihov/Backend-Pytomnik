@@ -83,7 +83,7 @@ class Student(models.Model):
 
     photo = models.ImageField("Фото студента", upload_to='students/photos/', blank=True, null=True)
 
-    level = models.CharField("Уровень доступа", max_length=10, choices=LEVEL_CHOICES, null=True, blank=True)
+    level = models.CharField("Уровень доступа", max_length=10, choices=LEVEL_CHOICES, default='', blank=True)
     status = models.CharField("Статус", max_length=20, choices=STATUS_CHOICES, default='active')
     category = models.CharField("Категория", max_length=30, choices=CATEGORY_CHOICES)
 
@@ -225,6 +225,14 @@ class LevelHistory(models.Model):
 
     def __str__(self):
         return f"{self.student} — {self.get_old_level_display()} → {self.get_new_level_display()}"
+
+    def get_old_level_display(self):
+        """Возвращает отображаемое значение старого уровня, включая 'Без уровня' вместо None"""
+        return dict(LEVEL_CHOICES).get(self.old_level, self.old_level or '—')
+
+    def get_new_level_display(self):
+        """Возвращает отображаемое значение нового уровня, включая 'Без уровня' вместо None"""
+        return dict(LEVEL_CHOICES).get(self.new_level, self.new_level or '—')
 
 
 class LevelByMonth(models.Model):
