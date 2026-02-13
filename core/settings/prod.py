@@ -9,11 +9,11 @@ ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost').split(',')
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('POSTGRES_DB', 'pytomnik'),
-        'USER': os.getenv('POSTGRES_USER', 'pytomnik'),
-        'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'supersecret'),
-        'HOST': 'postgres',
-        'PORT': 5432,
+        'NAME': os.getenv('POSTGRES_DB', 'pytomnic'),
+        'USER': os.getenv('POSTGRES_USER', 'pytomnic_user'),
+        'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'pytomnic123'),
+        'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
+        'PORT': os.getenv('POSTGRES_PORT', '5432'),
     }
 }
 
