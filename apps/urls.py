@@ -1,3 +1,4 @@
+#urls
 from django.contrib import admin
 from django.urls import path, include
 from apps.hr_calls.views import HrCallCreateView, HrCallDetailView, HrCallListView, HrCommentCreateView, HrCommentDetailView, HrCommentListView, HrFileCreateView, HrFileDeleteView, HrFileListView
