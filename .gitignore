@@ -19,17 +19,6 @@ ENV/
 env.bak/
 venv.bak/
 
-# Секреты и .env
-.env
-.env.local
-.env.*.local
-.env.production
-.env.backup
-.env
-.env.dev
-.env.prod
-.env.local
-*.env
 
 # Логи
 logs/
