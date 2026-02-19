@@ -23,7 +23,7 @@ class ColumnNotFound(KanbanAPIException):
 
 class CardNotFound(KanbanAPIException):
     status_code = status.HTTP_404_NOT_FOUND
-    default_detail = "Карточка студента не найдена"
+    default_detail = "Карточка колледжиста не найдена"
     default_code = "card_not_found"
 
 

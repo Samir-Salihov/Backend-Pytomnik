@@ -92,10 +92,10 @@ class StudentKanbanCard(models.Model):
         category = self.student.category
 
         if category in ['alabuga_mulatki', 'alabuga_start_sng', 'patriot', 'alabuga_start_rf'] and board_id != 'start':
-            raise ValidationError("Студент категории Алабуга Старт и Патриоты не может быть на доске Политеха")
+            raise ValidationError("Колледжист категории Алабуга Старт и Патриоты не может быть на доске Политеха")
 
         if category in ['college'] and board_id != 'polytech':
-            raise ValidationError("Студент категории Политех не может быть на доске Алабуга Старт")
+            raise ValidationError("Колледжист категории Политех не может быть на доске Алабуга Старт")
 
         # Убрана обязательность даты увольнения при перемещении в "Уволен"
         # Дата теперь опциональна

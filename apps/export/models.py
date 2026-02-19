@@ -9,7 +9,7 @@ class ExportLog(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name="Пользователь")
     exported_at = models.DateTimeField("Дата и время выгрузки", default=timezone.now)
     format = models.CharField("Формат", max_length=10, choices=[('excel', 'Excel'), ('csv', 'CSV')])
-    students_count = models.PositiveIntegerField("Количество студентов")
+    students_count = models.PositiveIntegerField("Количество колледжистов")
 
     class Meta:
         app_label = 'export'
@@ -18,4 +18,4 @@ class ExportLog(models.Model):
         ordering = ['-exported_at']
 
     def __str__(self):
-        return f"{self.user} — {self.format.upper()} — {self.students_count} студентов — {self.exported_at.strftime('%d.%m.%Y %H:%M')}" 
+        return f"{self.user} — {self.format.upper()} — {self.students_count} колледжистов — {self.exported_at.strftime('%d.%m.%Y %H:%M')}" 

@@ -81,7 +81,7 @@ class Student(models.Model):
 
     birth_date = models.DateField("Дата рождения", null=True, blank=True)
 
-    photo = models.ImageField("Фото студента", upload_to='students/photos/', blank=True, null=True)
+    photo = models.ImageField("Фото колледжиста", upload_to='students/photos/', blank=True, null=True)
 
     level = models.CharField("Уровень доступа", max_length=10, choices=LEVEL_CHOICES, default='', blank=True)
     status = models.CharField("Статус", max_length=20, choices=STATUS_CHOICES, default='active')
@@ -150,7 +150,7 @@ class Student(models.Model):
         return delta.years
 
     def clean(self):
-        """Комплексная валидация данных студента"""
+        """Комплексная валидация данных колледжиста"""
         errors = {}
         
         # Валидат имена
@@ -264,8 +264,8 @@ class Comment(models.Model):
     is_edited = models.BooleanField(default=False)
 
     class Meta:
-        verbose_name = "Комментарий к студенту"
-        verbose_name_plural = "Комментарии к студентам"
+        verbose_name = "Комментарий к колледжисту"
+        verbose_name_plural = "Комментарии к колледжистам"
         ordering = ['-created_at']
 
     def __str__(self):

@@ -8,7 +8,7 @@ from apps.students.models import Student, LevelByMonth
 def generate_excel_stream():
     wb = Workbook()
     ws = wb.active
-    ws.title = "Студенты"
+    ws.title = "Колледжисты"
 
     # Стили
     header_font = Font(bold=True, color="FFFFFF")

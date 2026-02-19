@@ -7,10 +7,10 @@ from .models import KanbanBoard, KanbanColumn, StudentKanbanCard
 # Кастомный заголовок админки (можно оставить или убрать)
 admin.site.site_header = "Питомник — Администрирование"
 admin.site.site_title = "Питомник"
-admin.site.index_title = "Канбан и студенты"
+admin.site.index_title = "Канбан и колледжисты"
 
 
-# Инлайн карточек студентов внутри колонки
+# Инлайн карточек колледжистов внутри колонки
 class StudentKanbanCardInline(admin.TabularInline):
     model = StudentKanbanCard
     extra = 0
@@ -26,7 +26,7 @@ class StudentKanbanCardInline(admin.TabularInline):
             '<a href="{}" style="font-weight:600; color:#1d4ed8;">{} → {}</a>',
             url, obj.student.full_name, obj.student.get_level_display()
         )
-    student_preview.short_description = "Студент"
+    student_preview.short_description = "Колледжист"
 
 
 @admin.register(KanbanColumn)
@@ -93,7 +93,7 @@ class StudentKanbanCardAdmin(admin.ModelAdmin):
             obj.student.age or "—",
             obj.student.get_level_display()
         )
-    student_preview.short_description = "Студент"
+    student_preview.short_description = "Колледжист"
 
     def column_colored(self, obj):
         return format_html(

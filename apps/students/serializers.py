@@ -159,7 +159,7 @@ class StudentCreateSerializer(serializers.ModelSerializer):
             age = delta.years
             if age > 30:
                 raise serializers.ValidationError(
-                    {"birth_date": "Возраст студента не может быть больше 30 лет"}
+                    {"birth_date": "Возраст колледжиста не может быть больше 30 лет"}
                 )
         
         return attrs
@@ -258,7 +258,7 @@ class StudentUpdateSerializer(serializers.ModelSerializer):
             age = delta.years
             if age > 30:
                 raise serializers.ValidationError({
-                    "birth_date": "Возраст студента не может быть больше 30 лет"
+                    "birth_date": "Возраст колледжиста не может быть больше 30 лет"
                 })
 
         return attrs

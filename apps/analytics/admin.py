@@ -188,7 +188,7 @@ class AnalyticsAdmin(admin.ModelAdmin):
         }
 
         # Отладка: выводим данные в админке
-        self.message_user(request, f"Данные загружены: всего студентов {total}, уровней {len(level_data)}", level='success')
+        self.message_user(request, f"Данные загружены: всего колледжистов {total}, уровней {len(level_data)}", level='success')
 
         context = {
             **self.admin_site.each_context(request),

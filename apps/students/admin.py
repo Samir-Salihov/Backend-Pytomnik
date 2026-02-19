@@ -391,7 +391,7 @@ class StudentAdmin(admin.ModelAdmin):
     
     def level_calendar_preview(self, obj):
         if not obj.pk:
-            return "Сохраните студента для просмотра календаря"
+            return "Сохраните колледжиста для просмотра календаря"
 
         current_year, current_month = timezone.now().year, timezone.now().month
 
@@ -515,7 +515,7 @@ class LevelByMonthAdmin(admin.ModelAdmin):
     def student_link(self, obj):
         url = reverse("admin:students_student_change", args=[obj.student.id])
         return format_html('<a href="{}">{}</a>', url, obj.student.full_name)
-    student_link.short_description = "Студент"
+    student_link.short_description = "Колледжист"
 
     def month_name(self, obj):
         return timezone.datetime(2000, obj.month, 1).strftime('%B')
@@ -560,7 +560,7 @@ class LevelHistoryAdmin(admin.ModelAdmin):
             '<a href="{}" style="color:#1d4ed8; font-weight:600;">{}</a>',
             url, obj.student.full_name
         )
-    student_link.short_description = "Студент"
+    student_link.short_description = "Колледжист"
     student_link.admin_order_field = 'student'
 
     def old_level_display(self, obj):

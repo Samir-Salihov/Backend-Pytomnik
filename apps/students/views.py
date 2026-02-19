@@ -59,7 +59,7 @@ class StudentDetailView(APIView):
 
 
 class StudentCreateView(APIView):
-    """Только HR-ТЕВ и Админ могут создавать студентов."""
+    """Только HR-ТЕВ и Админ могут создавать колледжистов."""
     permission_classes = [HRTEVOrAdminPermission]
 
     def post(self, request):
@@ -68,7 +68,7 @@ class StudentCreateView(APIView):
             student = serializer.save()
             return Response({
                 "success": True,
-                "message": "Студент успешно создан",
+                "message": "Колледжист успешно создан",
                 "student": {
                     "id": student.id,
                     "full_name": student.full_name,
@@ -80,13 +80,13 @@ class StudentCreateView(APIView):
 
         return Response({
             "success": False,
-            "message": "Ошибка при создании студента",
+            "message": "Ошибка при создании колледжиста",
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
 
 
 class StudentUpdateView(APIView):
-    """Только HR-ТЕВ и Админ могут обновлять студентов."""
+    """Только HR-ТЕВ и Админ могут обновлять колледжистов."""
     permission_classes = [HRTEVOrAdminPermission]
 
     def put(self, request, pk):
@@ -108,7 +108,7 @@ class StudentUpdateView(APIView):
 
             return Response({
                 "success": True,
-                "message": "Студент успешно обновлён",
+                "message": "Колледжист успешно обновлён",
                 "student": {
                     "id": updated_student.id,
                     "full_name": updated_student.full_name,
@@ -121,7 +121,7 @@ class StudentUpdateView(APIView):
 
         return Response({
             "success": False,
-            "message": "Ошибка при обновлении студента",
+            "message": "Ошибка при обновлении колледжиста",
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
 
@@ -135,12 +135,12 @@ class StudentDeleteView(APIView):
         student.delete()
         return Response({
             "success": True,
-            "message": f"Студент «{full_name}» успешно удалён"
+            "message": f"Колледжист «{full_name}» успешно удалён"
         }, status=status.HTTP_200_OK)
 
 
 class StudentChangeLevelView(APIView):
-    """Только HR-ТЕВ и Админ могут менять уровень студентов."""
+    """Только HR-ТЕВ и Админ могут менять уровень колледжистов."""
     permission_classes = [HRTEVOrAdminPermission]
 
     def post(self, request, pk):
