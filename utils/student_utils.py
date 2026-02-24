@@ -73,3 +73,41 @@ DIVISIONS_CHOICES = [
     ('acct_tax', 'Управление бухгалтерского и налогового учета'),
 ]
 
+
+# helpers for working with choice constants --------------------------------------------------
+
+def normalize_choice_key(val):
+    """Return a simplified lowercase string used for comparing values and labels.
+
+    Trims whitespace, lowercases and collapses internal spaces so that
+    ``"Промышленная автоматика"`` and ``"промышленная автоматика "``
+    will compare equal.
+    """
+    if not val:
+        return ''
+    return ' '.join(str(val).strip().lower().split())
+
+
+def map_choice_value(raw_value, choices, default=None):
+    """Given a raw input string return the corresponding key from *choices*.
+
+    The function will match on either the key or the human-readable label.
+    Comparison is case‑insensitive and whitespace is normalized.  If nothing
+    matches the *default* value (or ``raw_value``) is returned.
+
+    This is useful in import scripts or serializers where end users may supply
+    either the machine code (``'asutp'``) or the display name
+    (``'Промышленная автоматика'``).
+    """
+    if raw_value is None:
+        return default
+
+    norm = normalize_choice_key(raw_value)
+    # try key and label of each choice
+    for key, label in choices:
+        if norm == normalize_choice_key(key) or norm == normalize_choice_key(label):
+            return key
+    # fallback to raw_value itself if it's a valid key
+    if raw_value in dict(choices):
+        return raw_value
+    return default

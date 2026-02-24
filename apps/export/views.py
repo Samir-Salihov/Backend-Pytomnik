@@ -106,7 +106,8 @@ class ExportStudentsExcelView(APIView):
             df = pd.DataFrame(data, columns=headers)
 
             response = HttpResponse(content_type="text/csv; charset=utf-8")
-            response['Content-Disposition'] = f'attachment; filename="pitomnik_students_{timezone.now():%Y%m%d_%H%M%S}.csv"'
+            # use generic name export_data with timestamp instead of including "students"
+            response['Content-Disposition'] = f'attachment; filename="export_data_{timezone.now():%Y%m%d_%H%M%S}.csv"'
             df.to_csv(response, index=False, sep=";", encoding="utf-8-sig")
             return response
 
@@ -122,5 +123,6 @@ class ExportStudentsExcelView(APIView):
                 buffer.getvalue(),
                 content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-            response['Content-Disposition'] = f'attachment; filename="pitomnik_students_full_{timezone.now():%Y%m%d_%H%M%S}.xlsx"'
+            # generic name without "students"
+            response['Content-Disposition'] = f'attachment; filename="export_data_{timezone.now():%Y%m%d_%H%M%S}.xlsx"'
             return response

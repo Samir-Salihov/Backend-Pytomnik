@@ -374,41 +374,26 @@ def validate_decimal_range(value, min_value=0, max_value=100, field_name="Чис
 
 def validate_file_size(file, max_size_mb=10):
     """
-    Валидирует размер файла
-    
+    Originally this function enforced a maximum upload size.  the project
+    no longer applies any such limits for photo uploads, so it has been
+    reduced to a no-op.  It remains here only for historical compatibility
+    (calls that might be added by third-party code).
+
     Args:
-        file: File объект
-        max_size_mb: Максимальный размер в МБ
+        file: File object (ignored)
+        max_size_mb: Maximum size in megabytes (ignored)
     """
-    if not file:
-        return
-    
-    max_size_bytes = max_size_mb * 1024 * 1024
-    
-    if file.size > max_size_bytes:
-        raise ValidationError(
-            f"Файл не должен превышать {max_size_mb}МБ (текущий размер: {file.size / (1024*1024):.2f}МБ)"
-        )
+    # intentionally do nothing
+    return
 
 
 def validate_file_extension(file, allowed_extensions):
     """
-    Валидирует расширение файла
-    
-    Args:
-        file: File объект
-        allowed_extensions: Список допустимых расширений (без точки)
+    Previously used to restrict uploaded file extensions.  we no longer
+    impose any extension restrictions on photos or other uploads, so this
+    validator has been turned into a pass-through.
     """
-    if not file:
-        return
-    
-    filename = file.name.lower()
-    ext = filename.split('.')[-1] if '.' in filename else ''
-    
-    if ext not in [e.lower() for e in allowed_extensions]:
-        raise ValidationError(
-            f"Файл должен иметь одно из расширений: {', '.join(allowed_extensions)}"
-        )
+    return
 
 
 # ============================================================================

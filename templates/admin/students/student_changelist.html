@@ -90,7 +90,37 @@
             Все студенты со всеми полями
         </div>
     </div>
+
+    <!-- Удалить всех котов -->
+    <div class="action-card" style="background: linear-gradient(135deg, #e3342f 0%, #cc1f1a 100%);">
+        <div class="action-title">Удалить всех котов</div>
+        <div class="action-desc">Очистить базу студентов</div>
+        <form id="delete-all-form" method="post" action="{% url 'admin:students_delete_all' %}" style="display:none;">
+            {% csrf_token %}
+        </form>
+        <a href="#" id="delete-all-btn" class="action-btn export-btn" style="color:white;">Удалить</a>
+        <div class="action-note">
+            Внимание: действие необратимо
+        </div>
+    </div>
 </div>
 <br />
 {{ block.super }}
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script>
+window.addEventListener('DOMContentLoaded', function() {
+    var btn = document.getElementById('delete-all-btn');
+    if (btn) {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (confirm('Вы уверены, что хотите удалить всех котов?')) {
+                document.getElementById('delete-all-form').submit();
+            }
+        });
+    }
+});
+</script>
 {% endblock %}

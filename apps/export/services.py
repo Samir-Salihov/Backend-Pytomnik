@@ -43,6 +43,17 @@ def generate_excel_stream():
         cell.alignment = center
         cell.border = border
 
+    # prepare fills for level coloring
+    level_fill_map = {
+        'black': PatternFill('solid', fgColor='000000'),
+        'yellow': PatternFill('solid', fgColor='FFFF00'),
+        'red': PatternFill('solid', fgColor='FF0000'),
+        'green': PatternFill('solid', fgColor='00FF00'),
+        'fired': PatternFill('solid', fgColor='FFA500'),
+        '': PatternFill('solid', fgColor='CCCCCC'),  # no level
+        None: PatternFill('solid', fgColor='CCCCCC'),
+    }
+
     # Данные студентов с prefetch
     queryset = Student.objects.select_related('created_by', 'updated_by').prefetch_related('level_by_month').all()
 
@@ -85,7 +96,8 @@ def generate_excel_stream():
 
             # Студенты
             for student in students_in_cat:
-                row = [
+                # prepare raw values and track level keys for coloring
+                base_values = [
                     student.full_name,
                     student.first_name,
                     student.last_name,
@@ -95,8 +107,8 @@ def generate_excel_stream():
                     student.fired_date.strftime('%d.%m.%Y') if student.fired_date else "—",
                     student.get_status_display(),
                     student.get_category_display(),
-                    student.direction or "—",
-                    student.subdivision or "—",
+                    student.get_direction_display() or student.direction or "—",
+                    student.get_subdivision_display() or student.subdivision or "—",
                     student.phone_personal,
                     student.telegram or "—",
                     student.phone_parent,
@@ -108,8 +120,10 @@ def generate_excel_stream():
                     student.created_by.get_full_name() if student.created_by else "—",
                     student.updated_at.strftime("%d.%m.%Y %H:%M"),
                 ]
+                current_level_key = student.level or ''
 
-                # Календарь
+                # calendar entries list of (display, level_key)
+                calendar_entries = []
                 student_lbm = lbm_dict.get(student.id, {})
                 for year in range(2023, 2027):
                     for month in range(1, 13):
@@ -118,11 +132,29 @@ def generate_excel_stream():
                             display = lbm.get_level_display()
                             if lbm.level == 'fired' and lbm.fired_date:
                                 display += f" ({lbm.fired_date.strftime('%d.%m.%Y')})"
-                            row.append(display)
+                            calendar_entries.append((display, lbm.level))
                         else:
-                            row.append("—")
+                            calendar_entries.append(("—", None))
 
-                ws.append(row)
+                # write cells one by one so we can color them
+                full_values = base_values + [val for val, _ in calendar_entries]
+                for col_idx, value in enumerate(full_values, start=1):
+                    cell = ws.cell(row=row_num, column=col_idx, value=value)
+                    cell.border = border
+                    cell.alignment = center
+
+                    # color current level column (index 6)
+                    if col_idx == 6:
+                        fill = level_fill_map.get(current_level_key, None)
+                        if fill:
+                            cell.fill = fill
+                    # color calendar columns
+                    elif col_idx > len(base_headers):
+                        cal_idx = col_idx - len(base_headers) - 1
+                        level_key = calendar_entries[cal_idx][1]
+                        fill = level_fill_map.get(level_key, None)
+                        if fill:
+                            cell.fill = fill
                 row_num += 1
 
     # Автоширина

@@ -259,6 +259,9 @@ def sync_kanban_card_and_hr_call(sender, instance, created, **kwargs):
 def sync_level_by_month_to_student(sender, instance, created, **kwargs):
     current_year, current_month = get_current_year_month()
     if instance.year == current_year and instance.month == current_month:
+        # skip syncing when the entry has no level (used during initialization)
+        if not instance.level:
+            return
         student = instance.student
         old_level = student.level
         student.level = instance.level

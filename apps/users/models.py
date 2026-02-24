@@ -97,9 +97,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     
     # Аватарка
     avatar = models.ImageField(
+        # allow very long filenames for avatars as well
         _("Аватар"),
         upload_to=user_avatar_upload_path,
-        max_length=500,
+        max_length=1000,
         blank=True,
         null=True,
         help_text=_("Рекомендуемый размер: 300x300 пикселей")

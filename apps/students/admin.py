@@ -7,11 +7,15 @@ from django.utils.html import format_html, mark_safe
 from django.http import HttpResponse
 from django.utils import timezone
 from io import BytesIO
-from .models import Student, LevelHistory, Comment, MedicalFile, LevelByMonth, ViolationAct
+from .models import Student, LevelHistory, Comment, MedicalFile, LevelByMonth, ViolationAct, CATEGORY_CHOICES
 import pandas as pd
 from django.urls import reverse
 from apps.hr_calls.models import HrCall
+from apps.export.services import generate_excel_stream
 from decimal import Decimal, InvalidOperation
+
+# we rely on the choice constants and mapping helpers defined in utils
+from utils import student_utils
 
 
 class MedicalFileInline(admin.TabularInline):
@@ -125,6 +129,7 @@ class StudentAdmin(admin.ModelAdmin):
         custom_urls = [
             path('import-excel/', self.admin_site.admin_view(self.import_excel_view), name='students_import_excel'),
             path('export-excel/', self.admin_site.admin_view(self.export_excel_view), name='students_export_excel'),
+            path('delete-all/', self.admin_site.admin_view(self.delete_all_view), name='students_delete_all'),
         ]
         return custom_urls + urls
 
@@ -166,11 +171,6 @@ class StudentAdmin(admin.ModelAdmin):
                         'без уровня': '',
                         'без уровня': '',
                     }
-                    kvazar_map = {
-                        'сержант': 'sergeant',
-                        'рядовой': 'private',
-                        'запас': 'reserve',
-                    }
                     month_map = {
                         'январь': 1, 'февраль': 2, 'март': 3, 'апрель': 4, 'май': 5, 'июнь': 6,
                         'июль': 7, 'август': 8, 'сентябрь': 9, 'октябрь': 10, 'ноябрь': 11, 'декабрь': 12
@@ -202,13 +202,24 @@ class StudentAdmin(admin.ModelAdmin):
                                 else:
                                     raise ValueError("Должны быть указаны Фамилия+Имя или колонка ФИО")
 
+                            # map human-readable strings back to the internal choice keys
                             data = {
                                 'first_name': first_name,
                                 'last_name': last_name,
                                 'patronymic': patronymic,
-                                'direction': safe_str(row.get('Направление')),
-                                'subdivision': safe_str(row.get('Подразделение')),
-                                'category': safe_str(row.get('Категория', 'college')).lower() or 'college',
+                                'direction': student_utils.map_choice_value(
+                                    safe_str(row.get('Направление')),
+                                    student_utils.DIRECTION_CHOICES,
+                                ),
+                                'subdivision': student_utils.map_choice_value(
+                                    safe_str(row.get('Подразделение')),
+                                    student_utils.DIVISIONS_CHOICES,
+                                ),
+                                'category': student_utils.map_choice_value(
+                                    safe_str(row.get('Категория', 'college')),
+                                    CATEGORY_CHOICES,
+                                    default='college'
+                                ),
                                 'address_actual': safe_str(row.get('Адрес фактический')),
                                 'address_registered': safe_str(row.get('Адрес по прописке')),
                                 'phone_personal': safe_str(row.get('Личный телефон')) or None,
@@ -223,8 +234,15 @@ class StudentAdmin(admin.ModelAdmin):
                             # Новые поля
                             data['olympiads_participation'] = safe_str(row.get('Участие в олимпиадах')) or None
 
+                            # convert Квазар rank either from key or from display label
                             kvazar = safe_str(row.get('Участие в Квазаре'))
-                            data['kvazar_rank'] = kvazar_map.get(normalize_key(kvazar)) if kvazar else None
+                            if kvazar:
+                                data['kvazar_rank'] = student_utils.map_choice_value(
+                                    kvazar,
+                                    Student.KVAZAR_RANK_CHOICES
+                                )
+                            else:
+                                data['kvazar_rank'] = None
 
                             rating = row.get('Место в рейтинге')
                             if pd.notna(rating) and safe_str(rating):
@@ -336,50 +354,117 @@ class StudentAdmin(admin.ModelAdmin):
         return render(request, "admin/students/import_excel.html", {"form": form})
 
     def export_excel_view(self, request):
-        queryset = Student.objects.select_related('created_by', 'updated_by').all()
-        data = []
-        for s in queryset:
-            data.append([
-                s.full_name,
-                s.first_name,
-                s.last_name,
-                s.patronymic or "—",
-                s.age or "—",
-                s.get_level_display(),
-                s.get_status_display(),
-                s.get_category_display(),
-                s.direction or "—",
-                s.subdivision or "—",
-                s.phone_personal,
-                s.telegram or "—",
-                s.phone_parent,
-                s.fio_parent,
-                s.address_actual or "—",
-                s.address_registered or "—",
-                s.medical_info or "—",
-                s.created_at.strftime("%d.%m.%Y %H:%M"),
-                s.created_by.get_full_name() if s.created_by else "—",
-                s.updated_at.strftime("%d.%m.%Y %H:%M"),
-            ])
+        # support both excel and csv as the public API does
+        fmt = request.GET.get('format', 'excel').lower()
 
-        df = pd.DataFrame(data, columns=[
-            "ФИО", "Имя", "Фамилия", "Отчество", "Возраст", "Уровень", "Статус", "Категория",
-            "Направление", "Подразделение", "Личный телефон", "Telegram", "Телефон родителя",
-            "ФИО родителя", "Адрес фактический", "Адрес по прописке", "Медицинские данные",
-            "Создан", "Кем создан", "Изменён"
-        ])
+        # log the export, using the provided format for traceability
+        from apps.export.models import ExportLog
+        students_count = Student.objects.count()
+        ExportLog.objects.create(user=request.user, format=fmt, students_count=students_count)
 
+        if fmt == 'csv':
+            # re-use the same csv export logic as ExportStudentsExcelView
+            queryset = Student.objects.select_related('created_by', 'updated_by').prefetch_related('level_by_month').all()
+
+            lbm_dict = {}
+            for student in queryset:
+                lbm_dict[student.id] = {}
+                for lbm in student.level_by_month.all():
+                    lbm_dict[student.id][(lbm.year, lbm.month)] = lbm
+
+            months_ru = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+            calendar_headers = [f"{m} {y}" for y in range(2023, 2027) for m in months_ru]
+
+            base_headers = [
+                "ФИО", "Имя", "Фамилия", "Отчество", "Возраст", "Текущий уровень", "Текущая дата увольнения",
+                "Статус", "Категория", "Направление", "Подразделение", "Личный телефон", "Telegram",
+                "Телефон родителя", "ФИО родителя", "Адрес фактический", "Адрес по прописке", "Медицинские данные",
+                "Создан", "Кем создан", "Изменён"
+            ]
+            headers = base_headers + calendar_headers
+
+            data = []
+            category_order = ['college', 'alabuga_mulatki', 'alabuga_start_sng', 'patriot', 'alabuga_start_rf']
+            category_names = {
+                'college': 'Колледжисты',
+                'alabuga_mulatki': 'Алабуга Старт МИР',
+                'alabuga_start_sng': 'Алабуга Старт СНГ',
+                'patriot': 'Патриоты',
+                'alabuga_start_rf': 'Алабуга Старт РФ',
+            }
+
+            for cat in category_order:
+                students_in_cat = [s for s in queryset if s.category == cat]
+                students_in_cat.sort(key=lambda s: s.full_name)
+                if students_in_cat:
+                    data.append([f"=== КАТЕГОРИЯ: {category_names.get(cat, cat.upper())} ==="] + [""] * (len(headers) - 1))
+                    for student in students_in_cat:
+                        row = [
+                            student.full_name,
+                            student.first_name,
+                            student.last_name,
+                            student.patronymic or "—",
+                            student.age or "—",
+                            student.get_level_display(),
+                            student.fired_date.strftime('%d.%m.%Y') if student.fired_date else "—",
+                            student.get_status_display(),
+                            student.get_category_display(),
+                            student.direction or "—",
+                            student.subdivision or "—",
+                            student.phone_personal,
+                            student.telegram or "—",
+                            student.phone_parent,
+                            student.fio_parent,
+                            student.address_actual or "—",
+                            student.address_registered or "—",
+                            student.medical_info or "—",
+                            student.created_at.strftime("%d.%m.%Y %H:%M"),
+                            student.created_by.get_full_name() if student.created_by else "—",
+                            student.updated_at.strftime("%d.%m.%Y %H:%M"),
+                        ]
+                        student_lbm = lbm_dict.get(student.id, {})
+                        for year in range(2023, 2027):
+                            for month in range(1, 13):
+                                lbm = student_lbm.get((year, month))
+                                if lbm and lbm.level:
+                                    display = lbm.get_level_display()
+                                    if lbm.level == 'fired' and lbm.fired_date:
+                                        display += f" ({lbm.fired_date.strftime('%d.%m.%Y')})"
+                                    row.append(display)
+                                else:
+                                    row.append("—")
+                        data.append(row)
+            df = pd.DataFrame(data, columns=headers)
+            response = HttpResponse(content_type="text/csv; charset=utf-8")
+            response['Content-Disposition'] = f'attachment; filename="export_data_{timezone.now():%Y%m%d_%H%M%S}.csv"'
+            df.to_csv(response, index=False, sep=";", encoding="utf-8-sig")
+            return response
+        # default to excel
+        wb = generate_excel_stream()
         buffer = BytesIO()
-        df.to_excel(buffer, index=False, engine='openpyxl')
+        wb.save(buffer)
         buffer.seek(0)
-
         response = HttpResponse(
             buffer.getvalue(),
             content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-        filename = f"pitomnik_students_{timezone.now():%Y%m%d_%H%M%S}.xlsx"
-        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        # generic filename without students word to match export API
+        response['Content-Disposition'] = f'attachment; filename="export_data_{timezone.now():%Y%m%d_%H%M%S}.xlsx"'
         return response
+
+    def delete_all_view(self, request):
+        """Custom admin view to remove all students after confirmation."""
+        if request.method == 'POST':
+            total = Student.objects.count()
+            Student.objects.all().delete()
+            self.message_user(request, f"Удалено {total} котов.")
+            from django.http import HttpResponseRedirect
+            from django.urls import reverse
+            return HttpResponseRedirect(reverse('admin:students_student_changelist'))
+        # GET: render simple confirmation page
+        from django.shortcuts import render
+        context = {'title': 'Подтверждение удаления всех котов'}
+        return render(request, 'admin/students/delete_all_confirm.html', context)
 
     def save_model(self, request, obj, form, change):
         if not obj.pk:

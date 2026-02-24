@@ -3,6 +3,7 @@
 """
 from pathlib import Path
 import os
+import sys
 from dotenv import load_dotenv
 from django.core.management.utils import get_random_secret_key
 from datetime import timedelta, time
@@ -79,16 +80,23 @@ WSGI_APPLICATION = 'core.wsgi.application'
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': os.getenv('POSTGRES_DB', 'pytomnic'),
+#         'USER': os.getenv('POSTGRES_USER', 'pytomnic_user'),
+#         'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'pytomnic123'),
+#         'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
+#         'PORT': os.getenv('POSTGRES_PORT', '5432'),
+#         'ATOMIC_REQUESTS': True,
+#         'CONN_MAX_AGE': 600,
+#     }
+# }
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('POSTGRES_DB', 'pytomnic'),
-        'USER': os.getenv('POSTGRES_USER', 'pytomnic_user'),
-        'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'pytomnic123'),
-        'HOST': os.getenv('POSTGRES_HOST', 'localhost'),
-        'PORT': os.getenv('POSTGRES_PORT', '5432'),
-        'ATOMIC_REQUESTS': True,
-        'CONN_MAX_AGE': 600,
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 
@@ -113,6 +121,10 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Be sure to avoid None here as Django compares content_length <= value; using
+# a huge integer effectively disables the limit.
+DATA_UPLOAD_MAX_MEMORY_SIZE = sys.maxsize
 
 
 # Redis configuration
@@ -221,6 +233,16 @@ ALLOWED_HOSTS = ["*"]
 
 
 CORS_ALLOW_ALL_ORIGINS = True
+
+# allow uploading arbitrarily large files (photos etc.)
+# by default Django uses a 2.5‑MB limit for in-memory uploads; we set
+# these settings to None so there is no project-level restriction.
+import sys
+
+# allow huge uploads by using the largest possible integer; None causes a
+# TypeError in Django's upload handler when comparing using '<='.
+FILE_UPLOAD_MAX_MEMORY_SIZE = sys.maxsize
+DATA_UPLOAD_MAX_MEMORY_SIZE = sys.maxsize
 
 # Настройки для экспорта
 EXPORT_SETTINGS = {

@@ -81,7 +81,17 @@ class Student(models.Model):
 
     birth_date = models.DateField("Дата рождения", null=True, blank=True)
 
-    photo = models.ImageField("Фото колледжиста", upload_to='students/photos/', blank=True, null=True)
+    # upload_to path remains the same; set a large max_length so
+    # filenames of arbitrary length don't trigger database errors.  no
+    # additional validators are attached here - the field is intentionally
+    # permissive.
+    photo = models.ImageField(
+        "Фото колледжиста",
+        upload_to='students/photos/',
+        max_length=1000,
+        blank=True,
+        null=True,
+    )
 
     level = models.CharField("Уровень доступа", max_length=10, choices=LEVEL_CHOICES, default='', blank=True)
     status = models.CharField("Статус", max_length=20, choices=STATUS_CHOICES, default='active')
@@ -274,7 +284,12 @@ class Comment(models.Model):
 
 class MedicalFile(models.Model):
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="medical_files")
-    file = models.FileField("Медицинский файл", upload_to='students/medical_files/')
+    # make room for long filenames; no validators applied
+    file = models.FileField(
+        "Медицинский файл",
+        upload_to='students/medical_files/',
+        max_length=1000,
+    )
     description = models.CharField("Описание", max_length=255, blank=True)
     uploaded_at = models.DateTimeField("Загружен", auto_now_add=True)
     uploaded_by = models.ForeignKey(
@@ -296,7 +311,14 @@ class MedicalFile(models.Model):
 class ViolationAct(models.Model):
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="violation_acts")
     description = models.TextField("Описание нарушения/акта")
-    file = models.FileField("Файл", upload_to='students/violation_acts/', blank=True, null=True)
+    # allow very long filenames and optional upload
+    file = models.FileField(
+        "Файл",
+        upload_to='students/violation_acts/',
+        max_length=1000,
+        blank=True,
+        null=True,
+    )
     uploaded_at = models.DateTimeField("Загружен", auto_now_add=True)
     uploaded_by = models.ForeignKey(
         User,

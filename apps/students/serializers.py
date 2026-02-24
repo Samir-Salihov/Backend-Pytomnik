@@ -1,6 +1,9 @@
 from rest_framework import serializers
 from apps.kanban.models import StudentKanbanCard
-from .models import LevelByMonth, Student, LevelHistory, Comment, MedicalFile, ViolationAct
+from .models import (
+    LevelByMonth, Student, LevelHistory, Comment, MedicalFile, ViolationAct,
+    LEVEL_CHOICES, STATUS_CHOICES, CATEGORY_CHOICES, KVAZAR_RANK_CHOICES
+)
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from utils.exceptions import (
@@ -11,6 +14,29 @@ from utils.validators import (
     validate_birth_date, validate_phone_number, validate_first_name,
     validate_last_name, validate_patronymic
 )
+# helper that lives alongside the choice constants
+from utils import student_utils
+
+
+class LabelChoiceField(serializers.ChoiceField):
+    """ChoiceField that also accepts the display label as input.
+
+    DRF's default ``ChoiceField`` raises ``invalid_choice`` before our
+    ``validate_<field>`` methods run.  To let callers supply either the
+    internal key or the human-readable value we override ``to_internal_value``
+    and perform a reverse lookup using the same normalization logic used in
+    the import code.
+    """
+
+    def to_internal_value(self, data):
+        # attempt to translate label->key before running the usual validation
+        if isinstance(data, str):
+            norm = student_utils.normalize_choice_key(data)
+            for key, label in self.choices.items():
+                if norm == student_utils.normalize_choice_key(key) or norm == student_utils.normalize_choice_key(label):
+                    data = key
+                    break
+        return super().to_internal_value(data)
 
 User = get_user_model()
 
@@ -19,6 +45,9 @@ class StudentSerializer(serializers.ModelSerializer):
     level_display = serializers.CharField(source='get_level_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     category_display = serializers.CharField(source='get_category_display', read_only=True)
+    direction_display = serializers.CharField(source='get_direction_display', read_only=True)
+    subdivision_display = serializers.CharField(source='get_subdivision_display', read_only=True)
+    kvazar_rank_display = serializers.CharField(source='get_kvazar_rank_display', read_only=True)
 
     created_by_username = serializers.SerializerMethodField()
     updated_by_username = serializers.SerializerMethodField()
@@ -30,7 +59,8 @@ class StudentSerializer(serializers.ModelSerializer):
         model = Student
         fields = [
             'id', 'first_name', 'last_name', 'patronymic', 'full_name',
-            'direction', 'subdivision', 'age', 'level', 'level_display',
+            'direction', 'direction_display', 'subdivision', 'subdivision_display', 'age',
+            'level', 'level_display',
             'status', 'status_display', 'category', 'category_display',
             'address_actual', 'address_registered', 'phone_personal', 'telegram',
             'phone_parent', 'medical_info', 'created_at', 'updated_at',
@@ -65,13 +95,24 @@ class StudentSerializer(serializers.ModelSerializer):
 
 
 class StudentCreateSerializer(serializers.ModelSerializer):
-    photo = serializers.ImageField(required=False, allow_null=True)
+    # photo upload is intentionally unrestricted; clear built-in validators.
+    photo = serializers.ImageField(required=False, allow_null=True, validators=[])
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # photo has no limits
+        if 'photo' in self.fields:
+            self.fields['photo'].validators = []
+        # replace any ChoiceField instances with our label-aware subclass
+        for field in self.fields.values():
+            if isinstance(field, serializers.ChoiceField) and not isinstance(field, LabelChoiceField):
+                field.__class__ = LabelChoiceField
 
     class Meta:
         model = Student
         fields = [
             'first_name', 'last_name', 'patronymic', 'direction', 'subdivision',
-            'birth_date', 'photo', 'level', 'status', 'category',
+            'birth_date', 'photo', 'level', 'status', 'category', 'kvazar_rank',
             'address_actual', 'address_registered', 'phone_personal', 'telegram',
             'phone_parent', 'fio_parent', 'medical_info', 'is_called_to_hr'
         ]
@@ -83,6 +124,7 @@ class StudentCreateSerializer(serializers.ModelSerializer):
             'level': {'required': True},
             'status': {'required': True},
             'category': {'required': True},
+            'kvazar_rank': {'required': False},
             'is_called_to_hr': {'required': False, 'default': False},
             'direction': {'required': True},
             'subdivision': {'required': True},
@@ -98,6 +140,38 @@ class StudentCreateSerializer(serializers.ModelSerializer):
             validate_first_name(value)
         except Exception as e:
             raise serializers.ValidationError(str(e))
+        return value
+
+    # -------------------------------------------------
+    # convert user-provided labels back into choice keys
+    def validate_direction(self, value):
+        if value:
+            return student_utils.map_choice_value(value, student_utils.DIRECTION_CHOICES)
+        return value
+
+    def validate_subdivision(self, value):
+        if value:
+            return student_utils.map_choice_value(value, student_utils.DIVISIONS_CHOICES)
+        return value
+
+    def validate_category(self, value):
+        if value:
+            return student_utils.map_choice_value(value, CATEGORY_CHOICES, default=value)
+        return value
+
+    def validate_level(self, value):
+        if value:
+            return student_utils.map_choice_value(value, LEVEL_CHOICES, default=value)
+        return value
+
+    def validate_status(self, value):
+        if value:
+            return student_utils.map_choice_value(value, STATUS_CHOICES, default=value)
+        return value
+
+    def validate_kvazar_rank(self, value):
+        if value:
+            return student_utils.map_choice_value(value, KVAZAR_RANK_CHOICES, default=value)
         return value
 
     def validate_last_name(self, value):
@@ -165,16 +239,29 @@ class StudentCreateSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
+        # request may be omitted in some code paths (e.g. unit tests),
+        # so tolerate its absence and simply skip setting created_by/updated_by.
         request = self.context.get('request')
-        student = Student.objects.create(
-            **validated_data,
-            created_by=request.user,    
-            updated_by=request.user
-        )
+        if request and hasattr(request, 'user'):
+            student = Student.objects.create(
+                **validated_data,
+                created_by=request.user,
+                updated_by=request.user
+            )
+        else:
+            student = Student.objects.create(**validated_data)
         return student
 
 
 class StudentUpdateSerializer(serializers.ModelSerializer):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if 'photo' in self.fields:
+            self.fields['photo'].validators = []
+        for field in self.fields.values():
+            if isinstance(field, serializers.ChoiceField) and not isinstance(field, LabelChoiceField):
+                field.__class__ = LabelChoiceField
+
     class Meta:
         model = Student
         fields = [
@@ -191,6 +278,37 @@ class StudentUpdateSerializer(serializers.ModelSerializer):
                 validate_first_name(value)
             except Exception as e:
                 raise serializers.ValidationError(str(e))
+        return value
+
+    # choice mappings on update as well
+    def validate_direction(self, value):
+        if value:
+            return student_utils.map_choice_value(value, student_utils.DIRECTION_CHOICES)
+        return value
+
+    def validate_subdivision(self, value):
+        if value:
+            return student_utils.map_choice_value(value, student_utils.DIVISIONS_CHOICES)
+        return value
+
+    def validate_category(self, value):
+        if value:
+            return student_utils.map_choice_value(value, CATEGORY_CHOICES, default=value)
+        return value
+
+    def validate_level(self, value):
+        if value:
+            return student_utils.map_choice_value(value, LEVEL_CHOICES, default=value)
+        return value
+
+    def validate_status(self, value):
+        if value:
+            return student_utils.map_choice_value(value, STATUS_CHOICES, default=value)
+        return value
+
+    def validate_kvazar_rank(self, value):
+        if value:
+            return student_utils.map_choice_value(value, KVAZAR_RANK_CHOICES, default=value)
         return value
 
     def validate_last_name(self, value):
@@ -267,7 +385,8 @@ class StudentUpdateSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
-        instance.updated_by = request.user
+        if request and hasattr(request, 'user'):
+            instance.updated_by = request.user
         instance.save()
         return instance
 
@@ -450,6 +569,9 @@ class StudentDetailSerializer(serializers.ModelSerializer):
     level_display = serializers.CharField(source='get_level_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     category_display = serializers.CharField(source='get_category_display', read_only=True)
+    direction_display = serializers.CharField(source='get_direction_display', read_only=True)
+    subdivision_display = serializers.CharField(source='get_subdivision_display', read_only=True)
+    kvazar_rank_display = serializers.CharField(source='get_kvazar_rank_display', read_only=True)
     photo_url = serializers.SerializerMethodField(read_only=True)
     created_by_username = serializers.CharField(source='created_by.username', read_only=True, allow_null=True)
     updated_by_username = serializers.CharField(source='updated_by.username', read_only=True, allow_null=True)
@@ -465,7 +587,7 @@ class StudentDetailSerializer(serializers.ModelSerializer):
         model = Student
         fields = [
             'id', 'first_name', 'last_name', 'patronymic', 'full_name',
-            'direction', 'subdivision', 'birth_date', 'age',
+            'direction', 'direction_display', 'subdivision', 'subdivision_display', 'birth_date', 'age',
             'level', 'level_display', 'status', 'status_display',
             'category', 'category_display', 'is_called_to_hr',
             'address_actual', 'address_registered',
@@ -582,10 +704,14 @@ class MedicalFileCreateSerializer(serializers.ModelSerializer):
         fields = ['file', 'description']
 
     def create(self, validated_data):
+        # some callers (tests, internal helpers) may not provide a request object
+        # so we only set the fields when available.
         request = self.context.get('request')
         student = self.context.get('student')
-        validated_data['uploaded_by'] = request.user
-        validated_data['student'] = student
+        if request and hasattr(request, 'user'):
+            validated_data['uploaded_by'] = request.user
+        if student is not None:
+            validated_data['student'] = student
         return super().create(validated_data)
 
 
@@ -609,8 +735,11 @@ class ViolationActCreateSerializer(serializers.ModelSerializer):
         return value.strip()
 
     def create(self, validated_data):
+        # tolerate absent context in isolated serializer usage
         request = self.context.get('request')
         student = self.context.get('student')
-        validated_data['uploaded_by'] = request.user
-        validated_data['student'] = student
+        if request and hasattr(request, 'user'):
+            validated_data['uploaded_by'] = request.user
+        if student is not None:
+            validated_data['student'] = student
         return super().create(validated_data)
