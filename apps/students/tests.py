@@ -7,7 +7,7 @@ from apps.students.models import (
     KVAZAR_RANK_CHOICES, CATEGORY_CHOICES, LEVEL_CHOICES, STATUS_CHOICES
 )
 from apps.students.serializers import (
-    StudentCreateSerializer, StudentUpdateSerializer
+    StudentCreateSerializer, StudentUpdateSerializer, StudentDetailSerializer
 )
 from apps.students.models import Student
 
@@ -78,6 +78,22 @@ class SerializerChoiceInputTests(TestCase):
         self.assertEqual(student.level, 'black')
         self.assertEqual(student.status, 'active')
         self.assertEqual(student.kvazar_rank, 'sergeant')
+
+    def test_detail_serializer_includes_kvazar_display(self):
+        # ensure the explicitly-declared read-only field is included
+        from datetime import date
+        s = Student.objects.create(
+            first_name='X', last_name='Y', birth_date=date(2000, 1, 1),
+            phone_personal='70000000000', level='black', status='active',
+            category='college', direction='asutp', subdivision='hr',
+            address_actual='a', address_registered='b',
+            phone_parent='71111111111', fio_parent='P',
+            kvazar_rank='sergeant',
+        )
+        ser = StudentDetailSerializer(s)
+        self.assertIn('kvazar_rank_display', ser.data)
+        # display value should match human label
+        self.assertEqual(ser.data['kvazar_rank_display'], 'Сержант')
 
     def test_update_with_labels(self):
         student = Student.objects.create(
@@ -168,6 +184,59 @@ class SerializerChoiceInputTests(TestCase):
         self.assertNotEqual(response.status_code, 500)
 
 
+class AdminImportTests(TestCase):
+    def setUp(self):
+        self.admin = get_user_model().objects.create_superuser(username='admin', password='pass', email='a@b.com')
+        self.admin.role = 'admin'
+        self.admin.save()
+        self.client.force_login(self.admin)
+
+    def _make_excel(self, rows):
+        import pandas as pd
+        from io import BytesIO
+
+        df = pd.DataFrame(rows)
+        buf = BytesIO()
+        df.to_excel(buf, index=False)
+        buf.seek(0)
+        return buf
+
+    def test_import_creates_new_and_updates_existing(self):
+        """Uploading a sheet should upsert based on full name."""
+        # start with a file containing two students with same name but different categories
+        buf1 = self._make_excel([
+            {'ФИО': 'Иванов Иван', 'Категория': 'Колледжисты', 'Личный телефон': '33'},
+            {'ФИО': 'Иванов Иван', 'Категория': 'Патриоты', 'Личный телефон': '77'},
+        ])
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        upload1 = SimpleUploadedFile('first.xlsx', buf1.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        url = reverse('admin:students_import_excel')
+        resp = self.client.post(url, {'excel_file': upload1})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(Student.objects.count(), 2)
+        college = Student.objects.get(last_name='Иванов', first_name='Иван', category='college')
+        patriot = Student.objects.get(last_name='Иванов', first_name='Иван', category='patriot')
+        self.assertEqual(college.phone_personal, '33')
+        self.assertEqual(patriot.phone_personal, '77')
+
+        # import a new sheet updating only the college entry and adding a new person
+        buf2 = self._make_excel([
+            {'ФИО': 'Иванов Иван', 'Категория': 'Колледжисты', 'Личный телефон': '4444'},
+            {'ФИО': 'Сергеев Сергей', 'Категория': 'Колледжисты', 'Личный телефон': '5555'},
+        ])
+        upload2 = SimpleUploadedFile('second.xlsx', buf2.read(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        resp2 = self.client.post(url, {'excel_file': upload2})
+        self.assertEqual(resp2.status_code, 200)
+        self.assertEqual(Student.objects.count(), 3)
+        college.refresh_from_db()
+        patriot.refresh_from_db()
+        self.assertEqual(college.phone_personal, '4444')
+        # патриот не должен был измениться
+        self.assertEqual(patriot.phone_personal, '77')
+        sergey = Student.objects.get(last_name='Сергеев', first_name='Сергей')
+        self.assertEqual(sergey.phone_personal, '5555')
+
+
 class AdminDeleteAllTests(TestCase):
     def setUp(self):
         self.admin = get_user_model().objects.create_superuser(username='admin', password='pass', email='a@b.com')
@@ -185,3 +254,18 @@ class AdminDeleteAllTests(TestCase):
         response = self.client.post(url, {})
         self.assertRedirects(response, reverse('admin:students_student_changelist'))
         self.assertEqual(Student.objects.count(), 0)
+
+    def test_changelist_contains_modal_markup(self):
+        # ensure the JS-driven modal exists and buttons have correct attributes
+        change_url = reverse('admin:students_student_changelist')
+        response = self.client.get(change_url)
+        self.assertContains(response, 'id="delete-modal"')
+        self.assertContains(response, 'id="delete-all-btn"')
+        # confirm and cancel buttons should be present with proper types and classes
+        self.assertContains(response, 'id="confirm-delete"')
+        self.assertContains(response, 'class="action-btn import-btn confirm-btn"')
+        self.assertContains(response, 'type="button"')
+        self.assertContains(response, 'id="cancel-delete"')
+        self.assertContains(response, 'class="action-btn cancel-btn"')
+        # overlay click handler comment should be in script (regression check)
+        self.assertContains(response, 'overlay clicked - blast')

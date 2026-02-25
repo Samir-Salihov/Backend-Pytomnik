@@ -419,34 +419,6 @@ class InvalidDataException(APIException):
     def __init__(self, message="Неверные данные в запросе"):
         super().__init__(message, "INVALID_DATA", status.HTTP_400_BAD_REQUEST)
 
-
-# ============================================================================
-# ИСКЛЮЧЕНИЯ ФАЙЛОВ
-# ============================================================================
-
-class FileException(APIException):
-    """Базовое исключение для операций с файлами"""
-    pass
-
-
-class FileTooLargeException(FileException):
-    """Файл слишком большой"""
-    def __init__(self, message="Файл слишком большой"):
-        super().__init__(message, "FILE_TOO_LARGE", status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
-
-
-class InvalidFileTypeException(FileException):
-    """Неверный тип файла"""
-    def __init__(self, message="Неверный тип файла"):
-        super().__init__(message, "INVALID_FILE_TYPE", status.HTTP_400_BAD_REQUEST)
-
-
-class FileUploadFailedException(FileException):
-    """Ошибка при загрузке файла"""
-    def __init__(self, message="Ошибка при загрузке файла"):
-        super().__init__(message, "FILE_UPLOAD_FAILED", status.HTTP_400_BAD_REQUEST)
-
-
 # ============================================================================
 # ДРУГИЕ ИСКЛЮЧЕНИЯ
 # ============================================================================

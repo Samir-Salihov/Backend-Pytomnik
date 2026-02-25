@@ -141,6 +141,7 @@ class StudentAdmin(admin.ModelAdmin):
                 try:
                     df = pd.read_excel(BytesIO(file.read()), engine='openpyxl')
                     created = 0
+                    updated = 0
                     errors = []
 
                     # Функция для нормализации строк (удаляет лишние пробелы и приводит к lowercase)
@@ -265,16 +266,45 @@ class StudentAdmin(admin.ModelAdmin):
                                         errors.append(f"Строка {idx + 2}: Неверное значение {col_name}: {val}")
 
                             # Проверка на дубликат телефона (только если указан)
-                            if data['phone_personal'] and Student.objects.filter(phone_personal=data['phone_personal']).exists():
-                                raise ValueError(f"Телефон {data['phone_personal']} уже используется")
+                            # NOTE: если мы обновляем уже существующего кота, разрешаем тот же номер
+                            phone = data.get('phone_personal')
+                            # student переменная может быть определена ниже when updating
 
-                            # Оставляем level пустым (без уровня по дефолту)
-                            data['status'] = 'active'
+                            # Сначала попытаемся найти уже существующего студента по имени и категории
+                            qs = Student.objects.filter(
+                                first_name__iexact=first_name,
+                                last_name__iexact=last_name,
+                                category=data.get('category'),
+                            )
+                            if patronymic:
+                                qs = qs.filter(patronymic__iexact=patronymic)
+                            student = qs.first()
 
-                            student = Student.objects.create(**data)
-                            # Устанавливаем флаг чтобы не создавать История для импортированного студента
-                            student._is_import = True
-                            student.save()
+                            if student:
+                                # если номер указан и принадлежит другому студенту – ошибка
+                                if phone:
+                                    conflict = Student.objects.filter(phone_personal=phone).exclude(pk=student.pk)
+                                    if conflict.exists():
+                                        raise ValueError(f"Телефон {phone} уже используется")
+                                # Обновляем поля существующего студента
+                                for k, v in data.items():
+                                    # не перезаписываем created_by при апдейте
+                                    if k == 'created_by':
+                                        continue
+                                    setattr(student, k, v)
+                                student.updated_by = request.user
+                                student.save()
+                                updated += 1
+                            else:
+                                # никакого существующего кота не найдено – создаём нового
+                                if phone and Student.objects.filter(phone_personal=phone).exists():
+                                    raise ValueError(f"Телефон {phone} уже используется")
+                                data['status'] = 'active'  # default на создание
+                                student = Student.objects.create(**data)
+                                # Устанавливаем флаг чтобы не создавать История для импортированного студента
+                                student._is_import = True
+                                student.save()
+                                created += 1
 
                             # Календарь (только заполненные)
                             month_data = {}
@@ -338,11 +368,11 @@ class StudentAdmin(admin.ModelAdmin):
                             errors.append(f"Строка {idx + 2}: {str(e)}")
 
                     if errors:
-                        messages.warning(request, f"Создано {created} котов. Ошибки в {len(errors)} строках.")
+                        messages.warning(request, f"Создано {created} котов, обновлено {updated}. Ошибки в {len(errors)} строках.")
                         for error in errors[:20]:
                             messages.warning(request, error)
                     else:
-                        messages.success(request, f"Успешно создано {created} котов!")
+                        messages.success(request, f"Успешно создано {created} котов, обновлено {updated}.")
 
                     return render(request, "admin/students/import_excel.html", {"form": ExcelImportForm()})
 

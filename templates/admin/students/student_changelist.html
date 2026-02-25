@@ -93,12 +93,12 @@
 
     <!-- Удалить всех котов -->
     <div class="action-card" style="background: linear-gradient(135deg, #e3342f 0%, #cc1f1a 100%);">
-        <div class="action-title">Удалить всех котов</div>
-        <div class="action-desc">Очистить базу студентов</div>
+        <div class="action-title">☢Удалить всех котов☢</div>
+        <div class="action-desc">☢Очистить базу студентов☢</div>
         <form id="delete-all-form" method="post" action="{% url 'admin:students_delete_all' %}" style="display:none;">
             {% csrf_token %}
         </form>
-        <a href="#" id="delete-all-btn" class="action-btn export-btn" style="color:white;">Удалить</a>
+        <a href="#" id="delete-all-btn" class="action-btn import-btn">☢Удалить☢</a>
         <div class="action-note">
             Внимание: действие необратимо
         </div>
@@ -106,21 +106,259 @@
 </div>
 <br />
 {{ block.super }}
+    <!-- confirmation modal markup -->
+    <div id="delete-modal" class="modal hidden">
+        <div class="modal-content">
+            <h2 style="font-size:22px; margin:0 0 12px; color:#374151;">Вы уверены, что хотите удалить всех котов?</h2>
+            <p style="font-size:15px; margin-bottom:18px; color:#6b7280;">Действие необратимо — все записи студентов будут удалены.</p>
+            <div style="text-align:center; gap:20px; display:flex; justify-content:center;">
+                <button id="confirm-delete" type="button" class="action-btn import-btn confirm-btn" style="min-width:160px; padding:18px 28px; font-size:20px;">Да, удалить</button>
+                <button id="cancel-delete" type="button" class="action-btn cancel-btn" style="min-width:160px; padding:18px 28px; font-size:20px;">Отмена</button>
+            </div>
+        </div>
+    </div>
+    <!-- blast visuals (injected by JS) -->
+    <div id="blast-root" aria-hidden="true" style="pointer-events:none;"></div>
 {% endblock %}
 
 {% block extrahead %}
 {{ block.super }}
+<style>
+/* modal styles (aligned with import page aesthetics) */
+.modal.hidden { display: none; }
+.modal {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.45);
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none; transition: opacity 0.25s ease;
+    z-index: 2147483647;
+}
+.modal.visible { opacity: 1; pointer-events: all; }
+.modal-content {
+    background: #ffffff;
+    padding: 60px 50px;
+    border-radius: 32px;
+    box-shadow: 0 25px 80px rgba(0,0,0,0.2);
+    transform: scale(0.9);
+    transition: transform 0.25s ease;
+    z-index: 2147483648;
+    max-width: 680px;
+    text-align: center;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+}
+.modal-content h2 {
+    font-size: 24px;
+    color: #333;
+}
+.modal-content p {
+    font-size: 16px;
+    color: #555;
+}
+.modal-content {
+    border: 1px solid #e5e5e5;
+}
+.modal-content h2 { margin-bottom: 8px; }
+.modal-content p { margin-bottom: 18px; color: #6b7280; }
+.modal-content .action-btn { margin: 0 12px; cursor: pointer; }
+.modal-content .confirm-btn { background: linear-gradient(90deg,#667eea,#764ba2); color: white; }
+.modal-content .cancel-btn { background: #f3f4f6; color: #1f2937; }
+.modal.visible .modal-content { transform: scale(1); }
+
+/* blast animation visuals (nuclear style) */
+.blast {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    border-radius: 50%; opacity: 0; pointer-events: none; z-index: 2147483646;
+}
+.blast.flash {
+    width: 10px; height: 10px; background: white;
+    box-shadow: 0 0 120px 60px white;
+    animation: blastFlash 0.55s ease-out forwards;
+}
+.blast.fireball {
+    width: 60px; height: 60px;
+    background: radial-gradient(circle, #ffeb3b, #ff5722, #bf360c);
+    animation: blastFire 3.2s 0.08s ease-out forwards;
+}
+/* expanding ring */
+.blast.shockwave {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: 40px; height: 40px; border-radius: 50%;
+    border: 6px solid rgba(255,255,255,0.9);
+    box-shadow: 0 0 40px 8px rgba(255,184,28,0.25);
+    background: transparent;
+    opacity: 0; pointer-events: none;
+    animation: blastWave 1.6s 0.05s ease-out forwards;
+}
+@keyframes blastFlash {
+    0% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(60); }
+}
+@keyframes blastFire {
+    0% { opacity: 0; transform: translate(-50%, -50%) scale(0.1); }
+    10% { opacity: 1; transform: translate(-50%, -50%) scale(2); }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(10); }
+}
+
+@keyframes blastWave {
+    0% { opacity: 0.9; transform: translate(-50%, -50%) scale(0.5); }
+    30% { opacity: 0.7; transform: translate(-50%, -50%) scale(2.5); }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(8); }
+}
+</style>
 <script>
-window.addEventListener('DOMContentLoaded', function() {
-    var btn = document.getElementById('delete-all-btn');
-    if (btn) {
-        btn.addEventListener('click', function(e) {
-            e.preventDefault();
-            if (confirm('Вы уверены, что хотите удалить всех котов?')) {
-                document.getElementById('delete-all-form').submit();
+(function() {
+    function setup() {
+        console.log('delete modal setup');
+        var btn = document.getElementById('delete-all-btn');
+        var modal = document.getElementById('delete-modal');
+        var confirmBtn = document.getElementById('confirm-delete');
+        var cancelBtn = document.getElementById('cancel-delete');
+
+        function showModal() {
+            console.log('showModal called');
+            if (modal) {
+                // make modal visible and enable pointer events via `.visible`
+                modal.classList.remove('hidden');
+                modal.classList.add('visible');
+                modal.style.display = 'flex';
+                // smooth opacity transition
+                modal.style.opacity = '0';
+                setTimeout(function() { modal.style.opacity = '1'; }, 10);
+            }
+        }
+        function hideModal() {
+            console.log('hideModal called');
+            if (modal) {
+                // hide visually and then remove from flow
+                modal.style.opacity = '0';
+                modal.classList.remove('visible');
+                setTimeout(function() {
+                    modal.style.display = 'none';
+                    modal.classList.add('hidden');
+                }, 250);
+            }
+        }
+
+        if (btn) {
+            btn.addEventListener('click', function(e) {
+                console.log('delete button clicked');
+                e.preventDefault();
+                showModal();
+            });
+            // also make the whole red card clickable
+            var card = btn.closest('.action-card');
+            if (card) {
+                card.style.cursor = 'pointer';
+                card.addEventListener('click', function(e) {
+                    // ignore when actual delete link/button was clicked
+                    if (e.target === btn || e.target.closest('a') || e.target.closest('button')) {
+                        return;
+                    }
+                    console.log('card clicked');
+                    showModal();
+                });
+            }
+        } else {
+            console.log('delete button not found');
+        }
+        console.log('confirmBtn', confirmBtn, 'cancelBtn', cancelBtn);
+
+        // create and play blast visuals at (x,y) client coordinates, then callback
+        function showBlast(x, y, callback) {
+            try {
+                var root = document.getElementById('blast-root') || document.body;
+                // create wrapper to position all visuals
+                var wrap = document.createElement('div');
+                wrap.style.position = 'absolute';
+                wrap.style.left = (x || window.innerWidth/2) + 'px';
+                wrap.style.top = (y || window.innerHeight/2) + 'px';
+                wrap.style.transform = 'translate(-50%, -50%)';
+                wrap.style.pointerEvents = 'none';
+                wrap.className = 'blast-wrap';
+
+                var flash = document.createElement('div'); flash.className = 'blast flash';
+                var fire = document.createElement('div'); fire.className = 'blast fireball';
+                var shock = document.createElement('div'); shock.className = 'blast shockwave';
+
+                wrap.appendChild(flash);
+                wrap.appendChild(fire);
+                wrap.appendChild(shock);
+                root.appendChild(wrap);
+
+                // optional short sound via WebAudio (may be blocked by browser policy)
+                try {
+                    var AudioCtx = window.AudioContext || window.webkitAudioContext;
+                    if (AudioCtx) {
+                        var ctx = new AudioCtx();
+                        var o = ctx.createOscillator();
+                        var g = ctx.createGain();
+                        o.type = 'sine';
+                        o.frequency.setValueAtTime(220, ctx.currentTime);
+                        g.gain.setValueAtTime(0.001, ctx.currentTime);
+                        g.gain.exponentialRampToValueAtTime(0.5, ctx.currentTime + 0.01);
+                        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45);
+                        o.connect(g); g.connect(ctx.destination);
+                        o.start(); o.stop(ctx.currentTime + 0.5);
+                    }
+                } catch (err) {
+                    // ignore audio errors
+                }
+
+                // cleanup after animation (longer so shockwave completes)
+                setTimeout(function() {
+                    if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+                    if (typeof callback === 'function') callback();
+                }, 1600);
+            } catch (err) {
+                console.error('blast error', err);
+                if (typeof callback === 'function') callback();
+            }
+        }
+
+        if (confirmBtn) {
+            confirmBtn.addEventListener('click', function(e) {
+                console.log('confirm button clicked');
+                e.preventDefault();
+                // use click coordinates so blast originates from the button
+                var x = e.clientX || (confirmBtn.getBoundingClientRect().left + confirmBtn.offsetWidth/2);
+                var y = e.clientY || (confirmBtn.getBoundingClientRect().top + confirmBtn.offsetHeight/2);
+                showBlast(x, y, function() {
+                    document.getElementById('delete-all-form').submit();
+                });
+            });
+        }
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', function(e) {
+                console.log('cancel button clicked');
+                e.preventDefault();
+                hideModal();
+                // remove any stray blasts
+                var root = document.getElementById('blast-root'); if (root) root.innerHTML = '';
+            });
+        }
+        // click on overlay should produce blast effect but not close modal
+        if (modal) {
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    // play small blast at click, keep modal visible
+                    console.log('overlay clicked - blast');
+                    showBlast(e.clientX, e.clientY);
+                    // do not call hideModal()
+                }
+            });
+        }
+        // allow escape key to close
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                hideModal();
             }
         });
     }
-});
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', setup);
+    } else {
+        setup();
+    }
+})();
 </script>
 {% endblock %}

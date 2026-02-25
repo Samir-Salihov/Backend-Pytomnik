@@ -599,6 +599,7 @@ class StudentDetailSerializer(serializers.ModelSerializer):
             'fired_date', 'fired_date_display',
             'olympiads_participation', 'kvazar_rank', 'rating_place', 
             'average_ws', 'average_mbo', 'average_di',
+            'kvazar_rank_display',
             'violation_acts',
         ]
 

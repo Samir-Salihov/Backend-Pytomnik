@@ -6,7 +6,7 @@
 <p>Вы действительно хотите удалить <strong>всех</strong> котов и связанные с ними данные? Это действие необратимо.</p>
 <form method="post" action="." style="margin-top:20px;">
     {% csrf_token %}
-    <input type="submit" value="Да, удалить всех" class="default" />
+    <input type="submit" value="Да, удалить всех" class="default import-btn" style="color:#667eea;" />
     <a href="{% url 'admin:students_student_changelist' %}">Отмена</a>
 </form>
 {% endblock %}
