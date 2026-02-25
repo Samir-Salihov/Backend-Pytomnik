@@ -104,6 +104,18 @@
         </div>
     </div>
 </div>
+
+    <!-- Загрузка фото -->
+    <div class="action-card" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+        <div class="action-title">📸 Загрузка фотографий</div>
+        <div class="action-desc">Сопоставьте фото со студентами</div>
+        <a href="{% url 'students_bulk_photo_upload' %}" class="action-btn import-btn">
+            Загрузить фото
+        </a>
+        <div class="action-note">
+            По названию файла (ФИО студента)
+        </div>
+    </div>
 <br />
 {{ block.super }}
     <!-- confirmation modal markup -->

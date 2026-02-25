@@ -1,0 +1,711 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}Массовая загрузка фотографий студентов{% endblock %}
+
+{% block extrastyle %}
+<style>
+    body {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    }
+
+    .container {
+        width: 100%;
+        max-width: 900px;
+        margin: 20px;
+    }
+
+    .header {
+        text-align: center;
+        color: white;
+        margin-bottom: 40px;
+    }
+
+    .header h1 {
+        font-size: 2.5em;
+        margin: 0;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .header p {
+        font-size: 1.1em;
+        margin-top: 10px;
+        opacity: 0.95;
+    }
+
+    .card {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        padding: 40px;
+        margin-bottom: 30px;
+    }
+
+    .upload-area {
+        border: 3px dashed #667eea;
+        border-radius: 8px;
+        padding: 50px 20px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        background: #f8f9ff;
+    }
+
+    .upload-area:hover,
+    .upload-area.dragover {
+        border-color: #764ba2;
+        background: #f0f2ff;
+    }
+
+    .upload-area.dragover {
+        transform: scale(1.02);
+        box-shadow: inset 0 0 10px rgba(102, 126, 234, 0.1);
+    }
+
+    .upload-icon {
+        font-size: 3em;
+        margin-bottom: 15px;
+        animation: bounce 2s infinite;
+    }
+
+    @keyframes bounce {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-10px); }
+    }
+
+    .upload-area p {
+        margin: 10px 0;
+        color: #333;
+    }
+
+    .upload-area .main-text {
+        font-size: 1.2em;
+        font-weight: 600;
+        color: #667eea;
+    }
+
+    .upload-area .sub-text {
+        font-size: 0.95em;
+        color: #666;
+    }
+
+    .btn-container {
+        text-align: center;
+        margin-top: 30px;
+    }
+
+    input[type="file"] {
+        display: none;
+    }
+
+    .btn-upload {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 12px 30px;
+        border-radius: 6px;
+        font-size: 1em;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-upload:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+    }
+
+    .btn-upload:active {
+        transform: translateY(0);
+    }
+
+    .file-list {
+        margin-top: 30px;
+    }
+
+    .file-item {
+        display: flex;
+        align-items: center;
+        padding: 12px;
+        background: #f8f9ff;
+        border-radius: 6px;
+        margin-bottom: 8px;
+        font-size: 0.95em;
+        color: #333;
+    }
+
+    .file-item-icon {
+        margin-right: 12px;
+        font-size: 1.2em;
+    }
+
+    .file-item-name {
+        flex: 1;
+        word-break: break-word;
+    }
+
+    .file-item-remove {
+        cursor: pointer;
+        color: #999;
+        font-weight: bold;
+        margin-left: 10px;
+        transition: color 0.2s;
+    }
+
+    .file-item-remove:hover {
+        color: #d32f2f;
+    }
+
+    .results {
+        margin-top: 30px;
+        display: none;
+    }
+
+    .results.show {
+        display: block;
+    }
+
+    .summary-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+
+    .stat-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 8px;
+        text-align: center;
+    }
+
+    .stat-card.success {
+        background: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%);
+    }
+
+    .stat-card.warning {
+        background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+    }
+
+    .stat-card.error {
+        background: linear-gradient(135deg, #e55039 0%, #e55039 100%);
+    }
+
+    .stat-number {
+        font-size: 2em;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+
+    .stat-label {
+        font-size: 0.9em;
+        opacity: 0.9;
+    }
+
+    .result-section {
+        margin-bottom: 25px;
+    }
+
+    .result-title {
+        font-size: 1.1em;
+        font-weight: 600;
+        margin-bottom: 12px;
+        padding-bottom: 8px;
+        border-bottom: 2px solid #eee;
+        color: #333;
+    }
+
+    .result-item {
+        padding: 12px;
+        margin-bottom: 8px;
+        border-left: 4px solid #84fab0;
+        background: #f0fdf8;
+        border-radius: 4px;
+        font-size: 0.95em;
+    }
+
+    .result-item.success {
+        border-left-color: #84fab0;
+        background: #f0fdf8;
+    }
+
+    .result-item.warning {
+        border-left-color: #fee140;
+        background: #fffef0;
+    }
+
+    .result-item.error {
+        border-left-color: #ef5350;
+        background: #ffebee;
+    }
+
+    .result-item-title {
+        font-weight: 600;
+        color: #333;
+    }
+
+    .result-item-info {
+        font-size: 0.9em;
+        color: #666;
+        margin-top: 4px;
+    }
+
+    .loading {
+        display: none;
+        text-align: center;
+        padding: 20px;
+    }
+
+    .loading.show {
+        display: block;
+    }
+
+    .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #667eea;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 10px;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+        color: #667eea;
+        font-weight: 600;
+    }
+
+    .note {
+        background: #f0f4ff;
+        border-left: 4px solid #667eea;
+        padding: 15px;
+        border-radius: 4px;
+        margin-bottom: 20px;
+        font-size: 0.95em;
+        color: #333;
+    }
+
+    .note strong {
+        color: #667eea;
+    }
+
+    .no-results {
+        text-align: center;
+        padding: 20px;
+        color: #999;
+        font-size: 0.95em;
+    }
+
+    /* Toast notifications */
+    .toast-container {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        pointer-events: none;
+    }
+
+    .toast {
+        background: white;
+        padding: 16px 20px;
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 300px;
+        pointer-events: auto;
+        animation: slideIn 0.3s ease-out;
+    }
+
+    .toast.success {
+        border-left: 4px solid #84fab0;
+        background: #f0fdf8;
+    }
+
+    .toast.error {
+        border-left: 4px solid #ef5350;
+        background: #ffebee;
+    }
+
+    .toast.warning {
+        border-left: 4px solid #fee140;
+        background: #fffef0;
+    }
+
+    .toast.info {
+        border-left: 4px solid #667eea;
+        background: #f0f4ff;
+    }
+
+    .toast-icon {
+        font-size: 1.2em;
+    }
+
+    .toast-message {
+        flex: 1;
+        color: #333;
+        font-size: 0.95em;
+    }
+
+    @keyframes slideIn {
+        from {
+            transform: translateX(400px);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+
+    /* Preview in file list */
+    .file-item {
+        display: flex;
+        align-items: center;
+        padding: 12px;
+        background: #f8f9ff;
+        border-radius: 6px;
+        margin-bottom: 8px;
+        font-size: 0.95em;
+        color: #333;
+    }
+
+    .file-item-preview {
+        width: 50px;
+        height: 50px;
+        border-radius: 4px;
+        object-fit: cover;
+        margin-right: 12px;
+        border: 1px solid #ddd;
+    }
+
+    @media (max-width: 768px) {
+        .header h1 {
+            font-size: 1.8em;
+        }
+
+        .card {
+            padding: 20px;
+        }
+
+        .upload-area {
+            padding: 30px 15px;
+        }
+
+        .summary-stats {
+            grid-template-columns: 1fr;
+        }
+
+        .toast {
+            min-width: 280px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="header">
+        <h1>📸 Загрузка фотографий</h1>
+        <p>Закруглите файлы со студентами по ФИО</p>
+    </div>
+
+    <div class="card">
+        <div class="note">
+            <strong>💡 Как это работает:</strong> Загрузите фотографии, названия которых соответствуют ФИО студентов 
+            (например: <code>Иван Иванов Иванович.jpg</code>). Система автоматически найдёт соответствующих студентов 
+            и загрузит фото.
+        </div>
+
+        <form id="upload-form" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="upload-area" id="upload-area">
+                <div class="upload-icon">📁</div>
+                <p class="main-text">Перетащите фотографии сюда</p>
+                <p class="sub-text">Или нажмите, чтобы выбрать файлы</p>
+            </div>
+
+            <!-- allow selecting a whole folder (supported in Chromium browsers) -->
+            <input type="file" id="photo-input" name="photos" multiple accept="image/*" webkitdirectory directory>
+
+            <div class="file-list" id="file-list"></div>
+
+            <div class="btn-container">
+                <button type="submit" class="btn-upload">Загрузить фотографии</button>
+            </div>
+        </form>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <div class="loading-text">Обработка файлов...</div>
+        </div>
+
+        <div class="results" id="results"></div>
+    </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+    const uploadArea = document.getElementById('upload-area');
+    const photoInput = document.getElementById('photo-input');
+    const fileList = document.getElementById('file-list');
+    const uploadForm = document.getElementById('upload-form');
+    const loading = document.getElementById('loading');
+    const results = document.getElementById('results');
+    const toastContainer = document.getElementById('toast-container');
+
+    let selectedFiles = [];
+
+    // Toast notification system
+    function showToast(message, type = 'info', duration = 3000) {
+        const toastDiv = document.createElement('div');
+        toastDiv.className = `toast ${type}`;
+        
+        const icons = {
+            success: '✅',
+            error: '❌',
+            warning: '⚠️',
+            info: 'ℹ️'
+        };
+        
+        toastDiv.innerHTML = `
+            <span class="toast-icon">${icons[type] || icons.info}</span>
+            <span class="toast-message">${message}</span>
+        `;
+        
+        toastContainer.appendChild(toastDiv);
+        
+        if (duration > 0) {
+            setTimeout(() => {
+                toastDiv.style.animation = 'slideIn 0.3s ease-out reverse';
+                setTimeout(() => {
+                    toastDiv.remove();
+                }, 300);
+            }, duration);
+        }
+        
+        return toastDiv;
+    }
+
+    // Drag and drop (guard elements to avoid undefined errors)
+    if (uploadArea) {
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            if (uploadArea.classList) uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            if (uploadArea.classList) uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            if (uploadArea.classList) uploadArea.classList.remove('dragover');
+            const files = Array.from(e.dataTransfer.files || []);
+            addFiles(files);
+        });
+    }
+
+    uploadArea.addEventListener('click', () => photoInput.click());
+
+    photoInput.addEventListener('change', (e) => {
+        addFiles(Array.from(e.target.files));
+    });
+
+    function isImageFile(file) {
+        if (!file) return false;
+        if (file.type && file.type.startsWith('image/')) return true;
+        return /\.(jpe?g|png|gif|bmp|webp|tiff)$/i.test(file.name || '');
+    }
+
+    function addFiles(files) {
+        files.forEach(file => {
+            if (isImageFile(file)) {
+                selectedFiles.push(file);
+            }
+        });
+        updateFileList();
+    }
+
+    function updateFileList() {
+        fileList.innerHTML = '';
+        if (selectedFiles.length === 0) {
+            fileList.innerHTML = '<div class="no-results">Файлы не выбраны</div>';
+            return;
+        }
+
+        selectedFiles.forEach((file, index) => {
+            const item = document.createElement('div');
+            item.className = 'file-item';
+            const displayName = file.webkitRelativePath && file.webkitRelativePath.length ? file.webkitRelativePath : file.name;
+            
+            // Create preview for image
+            const fileReader = new FileReader();
+            
+            let previewHtml = '';
+            fileReader.onload = (e) => {
+                const previewImg = document.createElement('img');
+                previewImg.src = e.target.result;
+                previewImg.className = 'file-item-preview';
+                
+                const nameDiv = item.querySelector('.file-item-name');
+                if (nameDiv) {
+                    nameDiv.parentNode.insertBefore(previewImg, nameDiv);
+                }
+            };
+            
+            item.innerHTML = `
+                <div class="file-item-icon">🖼️</div>
+                <div class="file-item-name">${displayName}</div>
+                <div class="file-item-remove" onclick="removeFile(${index})">✕</div>
+            `;
+            
+            // Load preview for folder-selected files
+            fileReader.readAsDataURL(file);
+            
+            fileList.appendChild(item);
+        });
+    }
+
+    function removeFile(index) {
+        selectedFiles.splice(index, 1);
+        updateFileList();
+    }
+
+    uploadForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        if (selectedFiles.length === 0) {
+            showToast('Пожалуйста, выберите хотя бы один файл', 'warning');
+            return;
+        }
+
+        loading.classList.add('show');
+        results.classList.remove('show');
+
+        const formData = new FormData();
+        selectedFiles.forEach(file => {
+            formData.append('photos', file);
+        });
+
+        try {
+            showToast(`Загрузка ${selectedFiles.length} файла...`, 'info');
+            
+            const response = await fetch('{% url "students_bulk_photo_upload" %}', {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                }
+            });
+
+            const data = await response.json();
+
+            loading.classList.remove('show');
+
+            if (data.success) {
+                displayResults(data.results, data.summary);
+                selectedFiles = [];
+                updateFileList();
+                photoInput.value = '';
+                showToast('Фотографии успешно загружены!', 'success', 4000);
+            } else {
+                showToast('Ошибка: ' + data.message, 'error');
+            }
+        } catch (error) {
+            loading.classList.remove('show');
+            showToast('Ошибка при загрузке: ' + error.message, 'error');
+        }
+    });
+
+    function displayResults(results, summary) {
+        let html = '<div class="summary-stats">';
+
+        html += `
+            <div class="stat-card success">
+                <div class="stat-number">${summary.matched}</div>
+                <div class="stat-label">Загружено ✓</div>
+            </div>
+            <div class="stat-card warning">
+                <div class="stat-number">${summary.unmatched}</div>
+                <div class="stat-label">Не найдено</div>
+            </div>
+            <div class="stat-card error">
+                <div class="stat-number">${summary.errors}</div>
+                <div class="stat-label">Ошибки</div>
+            </div>
+        `;
+
+        html += '</div>';
+
+        // Успешно загруженные
+        if (results.matched.length > 0) {
+            html += '<div class="result-section">';
+            html += '<div class="result-title">✅ Успешно загружено (' + results.matched.length + ')</div>';
+            results.matched.forEach(item => {
+                html += `
+                    <div class="result-item success">
+                        <div class="result-item-title">${item.full_name}</div>
+                        <div class="result-item-info">Файл: ${item.filename}</div>
+                        ${item.warning ? '<div class="result-item-info">⚠️ ' + item.warning + '</div>' : ''}
+                    </div>
+                `;
+            });
+            html += '</div>';
+        }
+
+        // Не найдено
+        if (results.unmatched.length > 0) {
+            html += '<div class="result-section">';
+            html += '<div class="result-title">⚠️ Студенты не найдены (' + results.unmatched.length + ')</div>';
+            results.unmatched.forEach(item => {
+                html += `
+                    <div class="result-item warning">
+                        <div class="result-item-title">${item.fio || item.filename}</div>
+                        <div class="result-item-info">Причина: ${item.reason}</div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+        }
+
+        // Ошибки
+        if (results.errors.length > 0) {
+            html += '<div class="result-section">';
+            html += '<div class="result-title">❌ Ошибки (' + results.errors.length + ')</div>';
+            results.errors.forEach(item => {
+                html += `
+                    <div class="result-item error">
+                        <div class="result-item-title">${item.filename}</div>
+                        <div class="result-item-info">Ошибка: ${item.error}</div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+        }
+
+        results.innerHTML = html;
+        results.classList.add('show');
+    }
+
+    updateFileList();
+</script>
+{% endblock %}
