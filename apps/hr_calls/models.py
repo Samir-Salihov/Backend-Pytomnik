@@ -158,7 +158,11 @@ class HrFile(models.Model):
         related_name="files",
         verbose_name="Вызов"
     )
-    file = models.FileField("Файл", upload_to='hr_calls/files/')
+    # allow very long filenames (container-filesystems like ext4 have high
+    # limits, and some clients may generate UUID-based names). default max_length
+    # is only 100 which previously caused serializer errors when name exceeded
+    # that.  the field itself does not impose size limits on file contents.
+    file = models.FileField("Файл", upload_to='hr_calls/files/', max_length=1000)
     description = models.CharField("Описание", max_length=255, blank=True)
     uploaded_at = models.DateTimeField("Загружено", auto_now_add=True)
     uploaded_by = models.ForeignKey(
