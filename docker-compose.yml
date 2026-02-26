@@ -124,6 +124,7 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - static_volume:/app/staticfiles:ro
+      - ../frontend/Frontend-Pitomnik/dist:/usr/share/nginx/html:ro
       - media_volume:/app/media:ro
     ports:
       - "80:80"

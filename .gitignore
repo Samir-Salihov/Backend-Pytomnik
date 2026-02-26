@@ -77,4 +77,4 @@ exports/
 
 # Docker (если используешь)
 docker-compose.override.yml
-Dockerfile.local
+Dockerfile.local.env
