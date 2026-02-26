@@ -148,7 +148,47 @@ class StudentAdmin(admin.ModelAdmin):
                     def normalize_key(s):
                         if not s:
                             return ''
-                        return s.strip().lower()
+                        # normalize common Excel header variants (ё/е, multiple spaces, etc.)
+                        return ' '.join(str(s).strip().lower().replace('ё', 'е').split())
+
+                    # Robust parsing for dates coming from Excel: strings like 12.12.2000,
+                    # actual Excel dates (Timestamp/datetime/date), or Excel serial numbers.
+                    def parse_excel_date(val):
+                        if val is None or pd.isna(val):
+                            return None
+
+                        # pandas/openpyxl often returns Timestamp for date cells
+                        if isinstance(val, pd.Timestamp):
+                            return val.date()
+
+                        # python datetime/date
+                        try:
+                            from datetime import datetime, date
+                            if isinstance(val, datetime):
+                                return val.date()
+                            if isinstance(val, date):
+                                return val
+                        except Exception:
+                            pass
+
+                        # Excel serial date number (days since 1899-12-30 in Excel)
+                        if isinstance(val, (int, float)) and not isinstance(val, bool):
+                            try:
+                                return (pd.Timestamp('1899-12-30') + pd.to_timedelta(float(val), unit='D')).date()
+                            except Exception:
+                                # fall through to string parsing
+                                pass
+
+                        s = str(val).strip()
+                        if not s:
+                            return None
+
+                        # allow both "." and "," as separators
+                        s = s.replace(',', '.')
+                        dt = pd.to_datetime(s, dayfirst=True, errors='coerce')
+                        if pd.isna(dt):
+                            raise ValueError(f"Неверная дата: {val!r}. Ожидаю формат вроде 12.12.2000")
+                        return dt.date()
 
                     # Маппинги с нормализацией
                     # Жёлтый, Желтый, желтый, жёлтый
@@ -231,6 +271,11 @@ class StudentAdmin(admin.ModelAdmin):
                                 'created_by': request.user,
                                 'updated_by': request.user,
                             }
+
+                            # Дата рождения (колонка: "Дата рождения", значение: "12.12.2000" и т.п.)
+                            birth_raw = row.get('Дата рождения')
+                            if pd.notna(birth_raw) and safe_str(birth_raw):
+                                data['birth_date'] = parse_excel_date(birth_raw)
 
                             # Новые поля
                             data['olympiads_participation'] = safe_str(row.get('Участие в олимпиадах')) or None
@@ -360,7 +405,6 @@ class StudentAdmin(admin.ModelAdmin):
                                     }
                                 )
 
-                            created += 1
                             if months_imported > 0:
                                 messages.info(request, f"Кот {student.full_name}: импортировано {months_imported} месяцев")
 
