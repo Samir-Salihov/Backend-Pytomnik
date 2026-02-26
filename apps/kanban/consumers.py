@@ -14,6 +14,15 @@ class KanbanRealtimeConsumer(AsyncWebsocketConsumer):
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(self.group_name, self.channel_name)
 
+    async def receive(self, text_data):
+        text_data_json = json.loads(text_data)
+        message_type = text_data_json.get('type')
+
+        if message_type == 'ping':
+            await self.send(text_data=json.dumps({
+                'type': 'pong'
+            }))
+
     async def card_moved(self, event):
         await self.send(text_data=json.dumps({
             "type": "CARD_MOVED",
