@@ -57,6 +57,7 @@ services:
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
       REDIS_HOST: redis
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
       REDIS_PORT: 6379
     depends_on:
       db:
