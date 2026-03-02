@@ -4,8 +4,11 @@ from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 from django.db import transaction
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 
 from .models import LevelByMonth, MedicalFile, Student, LevelHistory, Comment, LEVEL_CHOICES, ViolationAct  
+from apps.kanban.models import StudentKanbanCard
 from .serializers import (
     LevelByMonthSerializer,
     LevelByMonthUpdateSerializer,
@@ -147,6 +150,8 @@ class StudentChangeLevelView(APIView):
         student = get_object_or_404(Student, pk=pk)
         new_level = request.data.get('new_level')
         comment = request.data.get('comment', '').strip()
+        previous_card = StudentKanbanCard.objects.filter(student=student).select_related('column__board').first()
+        from_column_id = previous_card.column_id if previous_card else None
 
         if new_level not in dict(LEVEL_CHOICES):
             return Response({"success": False, "message": "Недопустимый уровень"}, status=400)
@@ -161,6 +166,23 @@ class StudentChangeLevelView(APIView):
         student.status = 'fired' if new_level == 'fired' else 'active'
 
         student.save()
+
+        updated_card = StudentKanbanCard.objects.filter(student=student).select_related('column__board').first()
+        if updated_card:
+            try:
+                channel_layer = get_channel_layer()
+                async_to_sync(channel_layer.group_send)(
+                    f"kanban_{updated_card.column.board.id}",
+                    {
+                        "type": "card.moved",
+                        "card_id": student.id,
+                        "from_column": from_column_id or updated_card.column_id,
+                        "to_column": updated_card.column_id,
+                        "position": updated_card.position,
+                    }
+                )
+            except Exception:
+                pass
 
         return Response({
             "success": True,
