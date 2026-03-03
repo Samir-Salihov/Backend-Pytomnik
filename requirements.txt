@@ -15,8 +15,6 @@ cbor2==5.8.0
 celery==5.4.0
 certifi==2025.1.31
 cffi==2.0.0
-channels==4.3.2
-channels_redis==4.3.0
 charset-normalizer==3.4.1
 cleo==2.1.0
 click==8.3.1
@@ -27,7 +25,6 @@ colorama==0.4.6
 constantly==23.10.4
 crashtest==0.4.1
 cryptography==46.0.5
-daphne==4.2.1
 dash==3.3.0
 dash-bootstrap-components==2.0.4
 distlib==0.3.9
@@ -154,6 +151,7 @@ zipp==3.23.0
 <<<<<<< HEAD
 <<<<<<< HEAD
 zope.interface==8.2
+<<<<<<< HEAD
 =======
 daphne==4.1.2
 uvicorn[standard]==0.30.1
@@ -171,3 +169,10 @@ uvicorn[standard]==0.30.1
 >>>>>>> 1d1e53c (websokets 2)
 =======
 >>>>>>> 3d0e615 (updated import)
+=======
+
+# Исправленные версии channels
+channels==3.0.5
+channels_redis==3.4.0
+daphne==3.0.2
+>>>>>>> fcbce71 (fix req.txt)
