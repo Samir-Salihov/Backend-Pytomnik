@@ -7,10 +7,15 @@ from PIL import Image
 from io import BytesIO
 import os
 import re
+import zipfile
+import mimetypes
 from django.core.files.base import ContentFile
+from django.core.files.uploadedfile import SimpleUploadedFile
 from .models import Student
 
 logger = logging.getLogger(__name__)
+
+IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif'}
 
 
 def normalize_name(name):
@@ -27,6 +32,64 @@ def extract_full_name_from_filename(filename):
     return name_without_ext.strip()
 
 
+def is_image_filename(filename):
+    """Проверяет, что файл является изображением по расширению."""
+    if not filename:
+        return False
+    extension = os.path.splitext(filename)[1].lower()
+    return extension in IMAGE_EXTENSIONS
+
+
+def extract_photo_files_from_archive(archive_file):
+    """
+    Извлекает изображения из ZIP-архива и возвращает их как uploaded-файлы.
+
+    В архиве могут быть вложенные папки — для сопоставления используется
+    только имя файла (без пути).
+    """
+    if not archive_file:
+        return []
+
+    archive_name = getattr(archive_file, 'name', '')
+    if os.path.splitext(archive_name)[1].lower() != '.zip':
+        raise ValueError('Поддерживаются только ZIP-архивы')
+
+    extracted_files = []
+
+    try:
+        archive_file.seek(0)
+        with zipfile.ZipFile(archive_file) as zip_ref:
+            for member in zip_ref.infolist():
+                if member.is_dir():
+                    continue
+
+                basename = os.path.basename(member.filename)
+                if not basename or not is_image_filename(basename):
+                    continue
+
+                file_bytes = zip_ref.read(member)
+                if not file_bytes:
+                    continue
+
+                content_type = mimetypes.guess_type(basename)[0] or 'application/octet-stream'
+                extracted_files.append(
+                    SimpleUploadedFile(
+                        name=basename,
+                        content=file_bytes,
+                        content_type=content_type,
+                    )
+                )
+    except zipfile.BadZipFile as exc:
+        raise ValueError('Неверный ZIP-архив') from exc
+    finally:
+        archive_file.seek(0)
+
+    if not extracted_files:
+        raise ValueError('В ZIP-архиве не найдено изображений')
+
+    return extracted_files
+
+
 def process_photo_uploads(uploaded_files):
     """
     Обрабатывает загруженные файлы фотографий.
@@ -40,12 +103,16 @@ def process_photo_uploads(uploaded_files):
         - matched: список успешно обновлённых студентов
         - unmatched: список файлов, для которых не найден студент
         - errors: список ошибок при сохранении
+        - overwritten: список перезаписей (если одному студенту загружено несколько файлов)
     """
     results = {
         'matched': [],
         'unmatched': [],
-        'errors': []
+        'errors': [],
+        'overwritten': [],
     }
+
+    last_uploaded_filename_by_student = {}
     
     for uploaded_file in uploaded_files:
         filename = uploaded_file.name
@@ -113,6 +180,17 @@ def process_photo_uploads(uploaded_files):
             # Обрабатываем все найденные студенты (может быть несколько с одинаковым ФИО)
             for matched_student in matched_students:
                 student_full_name = ' '.join([p for p in [getattr(matched_student, 'last_name', '') or '', getattr(matched_student, 'first_name', '') or '', getattr(matched_student, 'patronymic', '') or ''] if p])
+                previous_filename = last_uploaded_filename_by_student.get(matched_student.id)
+                overwrite_warning = None
+
+                if previous_filename:
+                    overwrite_warning = f"Фото перезаписано: {previous_filename} → {filename}"
+                    results['overwritten'].append({
+                        'student_id': matched_student.id,
+                        'full_name': student_full_name,
+                        'previous_filename': previous_filename,
+                        'filename': filename,
+                    })
                 
                 try:
                     # Проверяем, это ли изображение
@@ -143,11 +221,17 @@ def process_photo_uploads(uploaded_files):
                     
                     logger.info(f"photo_upload: фото сохранено для student_id={matched_student.id}")
                     
-                    results['matched'].append({
+                    matched_item = {
                         'student_id': matched_student.id,
                         'full_name': student_full_name,
                         'filename': filename
-                    })
+                    }
+
+                    if overwrite_warning:
+                        matched_item['warning'] = overwrite_warning
+
+                    results['matched'].append(matched_item)
+                    last_uploaded_filename_by_student[matched_student.id] = filename
                     
                 except Exception as e:
                     # Ошибка при обработке изображения - просто копируем файл
@@ -159,12 +243,18 @@ def process_photo_uploads(uploaded_files):
                     )
                     logger.info(f"photo_upload: фото сохранено без оптимизации student_id={matched_student.id}")
                     
-                    results['matched'].append({
+                    matched_item = {
                         'student_id': matched_student.id,
                         'full_name': student_full_name,
                         'filename': filename,
                         'warning': 'Сохранено без оптимизации'
-                    })
+                    }
+
+                    if overwrite_warning:
+                        matched_item['warning'] = f"{matched_item['warning']}. {overwrite_warning}"
+
+                    results['matched'].append(matched_item)
+                    last_uploaded_filename_by_student[matched_student.id] = filename
         
         except Exception as e:
             results['errors'].append({

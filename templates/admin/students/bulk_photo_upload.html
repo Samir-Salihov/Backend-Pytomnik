@@ -422,30 +422,34 @@
 <div class="container">
     <div class="header">
         <h1>📸 Загрузка фотографий</h1>
-        <p>Закруглите файлы со студентами по ФИО</p>
+        <p>Загрузите папку или архив с фото по ФИО студентов</p>
     </div>
 
     <div class="card">
         <div class="note">
             <strong>💡 Как это работает:</strong> Загрузите фотографии, названия которых соответствуют ФИО студентов 
             (например: <code>Иван Иванов Иванович.jpg</code>). Система автоматически найдёт соответствующих студентов 
-            и загрузит фото.
+            и загрузит фото. Можно выбрать папку (если поддерживается браузером) или загрузить ZIP-архив папки.
         </div>
 
         <form id="upload-form" enctype="multipart/form-data">
             {% csrf_token %}
             <div class="upload-area" id="upload-area">
                 <div class="upload-icon">📁</div>
-                <p class="main-text">Перетащите фотографии сюда</p>
-                <p class="sub-text">Или нажмите, чтобы выбрать файлы</p>
+                <p class="main-text">Перетащите фотографии или ZIP-архив сюда</p>
+                <p class="sub-text">Или нажмите, чтобы выбрать файлы/папку</p>
             </div>
 
             <!-- allow selecting a whole folder (supported in Chromium browsers) -->
             <input type="file" id="photo-input" name="photos" multiple accept="image/*" webkitdirectory directory>
+            <input type="file" id="archive-input" name="photos_archive" accept=".zip" style="display: none;">
 
             <div class="file-list" id="file-list"></div>
 
             <div class="btn-container">
+                <button type="button" class="btn-upload" id="archive-btn" style="margin-right: 10px; background: linear-gradient(135deg, #0ea5e9 0%, #0369a1 100%);">
+                    Выбрать ZIP папки
+                </button>
                 <button type="submit" class="btn-upload">Загрузить фотографии</button>
             </div>
         </form>
@@ -470,8 +474,11 @@
     const loading = document.getElementById('loading');
     const results = document.getElementById('results');
     const toastContainer = document.getElementById('toast-container');
+    const archiveInput = document.getElementById('archive-input');
+    const archiveBtn = document.getElementById('archive-btn');
 
     let selectedFiles = [];
+    let selectedArchive = null;
 
     // Toast notification system
     function showToast(message, type = 'info', duration = 3000) {
@@ -525,8 +532,27 @@
 
     uploadArea.addEventListener('click', () => photoInput.click());
 
+    if (archiveBtn) {
+        archiveBtn.addEventListener('click', () => archiveInput.click());
+    }
+
     photoInput.addEventListener('change', (e) => {
         addFiles(Array.from(e.target.files));
+    });
+
+    archiveInput.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+
+        if (!/\.zip$/i.test(file.name || '')) {
+            showToast('Можно выбрать только ZIP-архив', 'warning');
+            archiveInput.value = '';
+            return;
+        }
+
+        selectedArchive = file;
+        showToast(`Выбран архив: ${file.name}`, 'info');
+        updateFileList();
     });
 
     function isImageFile(file) {
@@ -537,6 +563,10 @@
 
     function addFiles(files) {
         files.forEach(file => {
+            if (/\.zip$/i.test(file.name || '')) {
+                selectedArchive = file;
+                return;
+            }
             if (isImageFile(file)) {
                 selectedFiles.push(file);
             }
@@ -546,8 +576,23 @@
 
     function updateFileList() {
         fileList.innerHTML = '';
-        if (selectedFiles.length === 0) {
+        if (selectedFiles.length === 0 && !selectedArchive) {
             fileList.innerHTML = '<div class="no-results">Файлы не выбраны</div>';
+            return;
+        }
+
+        if (selectedArchive) {
+            const archiveItem = document.createElement('div');
+            archiveItem.className = 'file-item';
+            archiveItem.innerHTML = `
+                <div class="file-item-icon">🗜️</div>
+                <div class="file-item-name">ZIP: ${selectedArchive.name}</div>
+                <div class="file-item-remove" onclick="removeArchive()">✕</div>
+            `;
+            fileList.appendChild(archiveItem);
+        }
+
+        if (selectedFiles.length === 0) {
             return;
         }
 
@@ -589,11 +634,17 @@
         updateFileList();
     }
 
+    function removeArchive() {
+        selectedArchive = null;
+        archiveInput.value = '';
+        updateFileList();
+    }
+
     uploadForm.addEventListener('submit', async (e) => {
         e.preventDefault();
 
-        if (selectedFiles.length === 0) {
-            showToast('Пожалуйста, выберите хотя бы один файл', 'warning');
+        if (selectedFiles.length === 0 && !selectedArchive) {
+            showToast('Пожалуйста, выберите фото или ZIP-архив', 'warning');
             return;
         }
 
@@ -604,9 +655,13 @@
         selectedFiles.forEach(file => {
             formData.append('photos', file);
         });
+        if (selectedArchive) {
+            formData.append('photos_archive', selectedArchive);
+        }
 
         try {
-            showToast(`Загрузка ${selectedFiles.length} файла...`, 'info');
+            const totalToUpload = selectedFiles.length + (selectedArchive ? 1 : 0);
+            showToast(`Загрузка ${totalToUpload} файла...`, 'info');
             
             const response = await fetch('{% url "students_bulk_photo_upload" %}', {
                 method: 'POST',
@@ -624,8 +679,10 @@
             if (data.success) {
                 displayResults(data.results, data.summary);
                 selectedFiles = [];
+                selectedArchive = null;
                 updateFileList();
                 photoInput.value = '';
+                archiveInput.value = '';
                 showToast('Фотографии успешно загружены!', 'success', 4000);
             } else {
                 showToast('Ошибка: ' + data.message, 'error');
@@ -643,6 +700,10 @@
             <div class="stat-card success">
                 <div class="stat-number">${summary.matched}</div>
                 <div class="stat-label">Загружено ✓</div>
+            </div>
+            <div class="stat-card warning">
+                <div class="stat-number">${summary.overwritten || 0}</div>
+                <div class="stat-label">Перезаписано ↻</div>
             </div>
             <div class="stat-card warning">
                 <div class="stat-number">${summary.unmatched}</div>
@@ -666,6 +727,20 @@
                         <div class="result-item-title">${item.full_name}</div>
                         <div class="result-item-info">Файл: ${item.filename}</div>
                         ${item.warning ? '<div class="result-item-info">⚠️ ' + item.warning + '</div>' : ''}
+                    </div>
+                `;
+            });
+            html += '</div>';
+        }
+
+        if (results.overwritten && results.overwritten.length > 0) {
+            html += '<div class="result-section">';
+            html += '<div class="result-title">🔁 Перезаписанные фото (' + results.overwritten.length + ')</div>';
+            results.overwritten.forEach(item => {
+                html += `
+                    <div class="result-item warning">
+                        <div class="result-item-title">${item.full_name}</div>
+                        <div class="result-item-info">${item.previous_filename} → ${item.filename}</div>
                     </div>
                 `;
             });
