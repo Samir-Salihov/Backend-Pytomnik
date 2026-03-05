@@ -480,6 +480,8 @@
     let selectedFiles = [];
     let selectedArchive = null;
     const MAX_FILES_TO_RENDER = 150;
+    const BATCH_SIZE = 200;
+    const MAX_CLIENT_RESULT_DETAILS = 300;
 
     function getCookie(name) {
         const cookieValue = `; ${document.cookie}`;
@@ -501,7 +503,7 @@
     }
 
     // Toast notification system
-    function showToast(message, type = 'info', duration = 3000) {
+    function showToast(message, type = 'info', duration = 10000) {
         const toastDiv = document.createElement('div');
         toastDiv.className = `toast ${type}`;
         
@@ -572,6 +574,9 @@
 
         selectedArchive = file;
         showToast(`Выбран архив: ${file.name}`, 'info');
+        if (file.size > 200 * 1024 * 1024) {
+            showToast('Большой ZIP может обрываться по таймауту. Для 6000+ фото лучше выбрать папку (без архива) — она грузится пакетами.', 'warning', 8000);
+        }
         updateFileList();
     });
 
@@ -653,6 +658,115 @@
         updateFileList();
     }
 
+    function initAggregatedResults() {
+        return {
+            matched: [],
+            unmatched: [],
+            errors: [],
+            overwritten: [],
+            truncated: {
+                matched: 0,
+                unmatched: 0,
+                errors: 0,
+                overwritten: 0,
+            },
+            stats: {
+                total: 0,
+                matched: 0,
+                unmatched: 0,
+                errors: 0,
+                overwritten: 0,
+            }
+        };
+    }
+
+    function mergeBatchResults(target, batchResults) {
+        if (!batchResults) return;
+
+        ['matched', 'unmatched', 'errors', 'overwritten'].forEach((key) => {
+            const incoming = Array.isArray(batchResults[key]) ? batchResults[key] : [];
+            const availableSlots = Math.max(0, MAX_CLIENT_RESULT_DETAILS - target[key].length);
+
+            if (availableSlots > 0) {
+                target[key].push(...incoming.slice(0, availableSlots));
+            }
+
+            if (incoming.length > availableSlots) {
+                target.truncated[key] += (incoming.length - availableSlots);
+            }
+
+            target.truncated[key] += Number(batchResults?.truncated?.[key] || 0);
+
+            const statsValue = Number(batchResults?.stats?.[key]);
+            target.stats[key] += Number.isFinite(statsValue) ? statsValue : incoming.length;
+        });
+
+        const totalValue = Number(batchResults?.stats?.total);
+        target.stats.total += Number.isFinite(totalValue)
+            ? totalValue
+            : ((Array.isArray(batchResults.matched) ? batchResults.matched.length : 0)
+                + (Array.isArray(batchResults.unmatched) ? batchResults.unmatched.length : 0)
+                + (Array.isArray(batchResults.errors) ? batchResults.errors.length : 0));
+    }
+
+    async function uploadSingleRequest({ files = [], archive = null, csrfToken }) {
+        const formData = new FormData();
+
+        files.forEach(file => {
+            formData.append('photos', file);
+        });
+
+        if (archive) {
+            formData.append('photos_archive', archive);
+        }
+
+        formData.append('csrfmiddlewaretoken', csrfToken);
+
+        const response = await fetch('{% url "students_bulk_photo_upload" %}', {
+            method: 'POST',
+            body: formData,
+            credentials: 'same-origin',
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
+
+        const contentType = response.headers.get('content-type') || '';
+        let data = null;
+
+        if (contentType.includes('application/json')) {
+            try {
+                data = await response.json();
+            } catch {
+                data = null;
+            }
+        } else {
+            const rawBody = await response.text();
+
+            if (response.redirected || rawBody.includes('<!DOCTYPE html') || rawBody.includes('<html')) {
+                throw new Error('Сервер вернул HTML вместо JSON. Проверь авторизацию в админке (сессия могла истечь) или 502 у nginx/gunicorn.');
+            }
+
+            throw new Error(`Сервер вернул неожиданный ответ (${response.status}).`);
+        }
+
+        if (!response.ok) {
+            const serverMessage = data?.message || data?.detail || `Ошибка загрузки (${response.status})`;
+            throw new Error(serverMessage);
+        }
+
+        if (!data) {
+            throw new Error('Сервер вернул пустой JSON-ответ');
+        }
+
+        if (!data.success) {
+            throw new Error(data.message || 'Сервер не принял пакет файлов');
+        }
+
+        return data;
+    }
+
     uploadForm.addEventListener('submit', async (e) => {
         e.preventDefault();
 
@@ -664,77 +778,73 @@
         loading.classList.add('show');
         resultsContainer.classList.remove('show');
 
-        const formData = new FormData();
-        selectedFiles.forEach(file => {
-            formData.append('photos', file);
-        });
-        if (selectedArchive) {
-            formData.append('photos_archive', selectedArchive);
-        }
-
         const csrfToken = getCSRFToken();
         if (!csrfToken) {
             loading.classList.remove('show');
             showToast('Не найден CSRF токен. Обновите страницу и повторите.', 'error', 5000);
             return;
         }
-        formData.append('csrfmiddlewaretoken', csrfToken);
+
+        const aggregatedResults = initAggregatedResults();
 
         try {
-            const totalToUpload = selectedFiles.length + (selectedArchive ? 1 : 0);
-            showToast(`Загрузка ${totalToUpload} файла...`, 'info');
-            
-            const response = await fetch('{% url "students_bulk_photo_upload" %}', {
-                method: 'POST',
-                body: formData,
-                credentials: 'same-origin',
-                headers: {
-                    'X-CSRFToken': csrfToken,
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
-            });
+            const totalImageBatches = Math.ceil(selectedFiles.length / BATCH_SIZE);
+            const totalRequests = totalImageBatches + (selectedArchive ? 1 : 0);
+            let requestNumber = 0;
 
-            const contentType = response.headers.get('content-type') || '';
-            let data = null;
+            for (let batchIndex = 0; batchIndex < totalImageBatches; batchIndex++) {
+                requestNumber += 1;
+                const start = batchIndex * BATCH_SIZE;
+                const end = start + BATCH_SIZE;
+                const filesBatch = selectedFiles.slice(start, end);
 
-            if (contentType.includes('application/json')) {
-                try {
-                    data = await response.json();
-                } catch {
-                    data = null;
-                }
-            } else {
-                const rawBody = await response.text();
+                showToast(
+                    `Пакет ${requestNumber}/${totalRequests}: загружаю ${filesBatch.length} фото...`,
+                    'info',
+                    2500
+                );
 
-                if (response.redirected || rawBody.includes('<!DOCTYPE html') || rawBody.includes('<html')) {
-                    throw new Error('Сервер вернул HTML вместо JSON. Проверь авторизацию в админке (сессия могла истечь) или 502 у nginx/gunicorn.');
-                }
+                const batchData = await uploadSingleRequest({
+                    files: filesBatch,
+                    csrfToken,
+                });
 
-                throw new Error(`Сервер вернул неожиданный ответ (${response.status}).`);
+                mergeBatchResults(aggregatedResults, batchData.results);
             }
 
-            if (!response.ok) {
-                const serverMessage = data?.message || data?.detail || `Ошибка загрузки (${response.status})`;
-                throw new Error(serverMessage);
+            if (selectedArchive) {
+                requestNumber += 1;
+                showToast(
+                    `Пакет ${requestNumber}/${totalRequests}: загружаю архив ${selectedArchive.name}...`,
+                    'info',
+                    3000
+                );
+
+                const archiveData = await uploadSingleRequest({
+                    archive: selectedArchive,
+                    csrfToken,
+                });
+
+                mergeBatchResults(aggregatedResults, archiveData.results);
             }
 
-            if (!data) {
-                throw new Error('Сервер вернул пустой JSON-ответ');
-            }
+            const finalSummary = {
+                total: aggregatedResults.stats.total,
+                matched: aggregatedResults.stats.matched,
+                overwritten: aggregatedResults.stats.overwritten,
+                unmatched: aggregatedResults.stats.unmatched,
+                errors: aggregatedResults.stats.errors,
+            };
 
             loading.classList.remove('show');
 
-            if (data.success) {
-                displayResults(data.results, data.summary);
-                selectedFiles = [];
-                selectedArchive = null;
-                updateFileList();
-                photoInput.value = '';
-                archiveInput.value = '';
-                showToast('Фотографии успешно загружены!', 'success', 4000);
-            } else {
-                showToast('Ошибка: ' + data.message, 'error');
-            }
+            displayResults(aggregatedResults, finalSummary);
+            selectedFiles = [];
+            selectedArchive = null;
+            updateFileList();
+            photoInput.value = '';
+            archiveInput.value = '';
+            showToast('Фотографии успешно загружены!', 'success', 4000);
         } catch (error) {
             loading.classList.remove('show');
             showToast('Ошибка при загрузке: ' + error.message, 'error');
