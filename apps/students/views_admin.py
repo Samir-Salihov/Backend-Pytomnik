@@ -6,7 +6,8 @@ from django.http import HttpResponseForbidden
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.shortcuts import render
-from .photo_uploader import process_photo_uploads, extract_photo_files_from_archive
+from itertools import chain
+from .photo_uploader import process_photo_uploads, iter_photo_files_from_archive
 
 
 @login_required
@@ -23,36 +24,44 @@ def bulk_photo_upload(request):
         uploaded_files = request.FILES.getlist('photos')
         archive_file = request.FILES.get('photos_archive')
 
-        archive_files = []
+        archive_files_iterator = []
         if archive_file:
             try:
-                archive_files = extract_photo_files_from_archive(archive_file)
+                archive_files_iterator = iter_photo_files_from_archive(archive_file)
             except ValueError as exc:
                 return JsonResponse({
                     'success': False,
                     'message': str(exc)
                 }, status=400)
 
-        files_to_process = [*uploaded_files, *archive_files]
+        files_to_process = chain(uploaded_files, archive_files_iterator)
 
-        if not files_to_process:
+        if not uploaded_files and not archive_file:
             return JsonResponse({
                 'success': False,
                 'message': 'Не выбрано ни одного файла'
             }, status=400)
 
         # Обрабатываем загруженные файлы
-        results = process_photo_uploads(files_to_process)
+        try:
+            results = process_photo_uploads(files_to_process)
+        except ValueError as exc:
+            return JsonResponse({
+                'success': False,
+                'message': str(exc)
+            }, status=400)
+
+        stats = results.get('stats', {})
 
         return JsonResponse({
             'success': True,
             'results': results,
             'summary': {
-                'total': len(files_to_process),
-                'matched': len(results['matched']),
-                'overwritten': len(results['overwritten']),
-                'unmatched': len(results['unmatched']),
-                'errors': len(results['errors'])
+                'total': stats.get('total', 0),
+                'matched': stats.get('matched', 0),
+                'overwritten': stats.get('overwritten', 0),
+                'unmatched': stats.get('unmatched', 0),
+                'errors': stats.get('errors', 0)
             }
         })
     

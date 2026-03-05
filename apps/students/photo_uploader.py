@@ -9,6 +9,8 @@ import os
 import re
 import zipfile
 import mimetypes
+from collections import defaultdict
+from itertools import permutations
 from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from .models import Student
@@ -16,6 +18,7 @@ from .models import Student
 logger = logging.getLogger(__name__)
 
 IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.tiff', '.tif'}
+MAX_RESULT_DETAILS = 300
 
 
 def normalize_name(name):
@@ -54,7 +57,21 @@ def extract_photo_files_from_archive(archive_file):
     if os.path.splitext(archive_name)[1].lower() != '.zip':
         raise ValueError('Поддерживаются только ZIP-архивы')
 
-    extracted_files = []
+    return list(iter_photo_files_from_archive(archive_file))
+
+
+def iter_photo_files_from_archive(archive_file):
+    """
+    Итерирует изображения из ZIP-архива без загрузки всего архива в память.
+    """
+    if not archive_file:
+        return
+
+    archive_name = getattr(archive_file, 'name', '')
+    if os.path.splitext(archive_name)[1].lower() != '.zip':
+        raise ValueError('Поддерживаются только ZIP-архивы')
+
+    found_images = False
 
     try:
         archive_file.seek(0)
@@ -71,23 +88,73 @@ def extract_photo_files_from_archive(archive_file):
                 if not file_bytes:
                     continue
 
+                found_images = True
                 content_type = mimetypes.guess_type(basename)[0] or 'application/octet-stream'
-                extracted_files.append(
-                    SimpleUploadedFile(
-                        name=basename,
-                        content=file_bytes,
-                        content_type=content_type,
-                    )
+                yield SimpleUploadedFile(
+                    name=basename,
+                    content=file_bytes,
+                    content_type=content_type,
                 )
     except zipfile.BadZipFile as exc:
         raise ValueError('Неверный ZIP-архив') from exc
     finally:
         archive_file.seek(0)
 
-    if not extracted_files:
+    if not found_images:
         raise ValueError('В ZIP-архиве не найдено изображений')
 
-    return extracted_files
+
+def _tokenize_name(name):
+    return [p for p in re.split(r"[\s,_\-\.]+", (name or '').lower()) if p]
+
+
+def _build_student_indexes():
+    students_by_id = {}
+    exact_name_index = defaultdict(list)
+    token_to_student_ids = defaultdict(set)
+
+    students = Student.objects.only('id', 'last_name', 'first_name', 'patronymic')
+    for student in students:
+        student_full_name = ' '.join([
+            p for p in [
+                getattr(student, 'last_name', '') or '',
+                getattr(student, 'first_name', '') or '',
+                getattr(student, 'patronymic', '') or ''
+            ] if p
+        ])
+
+        norm_student_fio = normalize_name(student_full_name)
+        if norm_student_fio:
+            exact_name_index[norm_student_fio].append(student)
+
+        tokens = _tokenize_name(student_full_name)
+        students_by_id[student.id] = student
+        for token in set(tokens):
+            token_to_student_ids[token].add(student.id)
+
+    return students_by_id, exact_name_index, token_to_student_ids
+
+
+def _build_name_candidates(fio_from_file):
+    parts = _tokenize_name(fio_from_file)
+    candidates = set()
+
+    if parts:
+        candidates.add(''.join(parts))
+
+        if len(parts) <= 3:
+            for perm in permutations(parts):
+                candidates.add(''.join(perm))
+
+    return parts, candidates
+
+
+def _append_result_item(results, key, item):
+    results['stats'][key] += 1
+    if len(results[key]) < MAX_RESULT_DETAILS:
+        results[key].append(item)
+    else:
+        results['truncated'][key] += 1
 
 
 def process_photo_uploads(uploaded_files):
@@ -104,25 +171,47 @@ def process_photo_uploads(uploaded_files):
         - unmatched: список файлов, для которых не найден студент
         - errors: список ошибок при сохранении
         - overwritten: список перезаписей (если одному студенту загружено несколько файлов)
+        - stats: полная статистика (включая элементы, не попавшие в detail-списки)
+        - truncated: количество скрытых detail-элементов по каждой категории
     """
     results = {
         'matched': [],
         'unmatched': [],
         'errors': [],
         'overwritten': [],
+        'stats': {
+            'total': 0,
+            'matched': 0,
+            'unmatched': 0,
+            'errors': 0,
+            'overwritten': 0,
+        },
+        'truncated': {
+            'matched': 0,
+            'unmatched': 0,
+            'errors': 0,
+            'overwritten': 0,
+        }
     }
 
     last_uploaded_filename_by_student = {}
-    
-    for uploaded_file in uploaded_files:
-        filename = uploaded_file.name
+    students_by_id, exact_name_index, token_to_student_ids = _build_student_indexes()
+
+    try:
+        iterator = iter(uploaded_files)
+    except TypeError:
+        iterator = iter([])
+
+    for uploaded_file in iterator:
+        results['stats']['total'] += 1
+        filename = getattr(uploaded_file, 'name', '') or 'unknown_file'
         
         # Извлекаем ФИО из названия файла
         fio_from_file = extract_full_name_from_filename(filename)
         norm_file_fio = normalize_name(fio_from_file)
         
         if not norm_file_fio:
-            results['unmatched'].append({
+            _append_result_item(results, 'unmatched', {
                 'filename': filename,
                 'reason': 'Не удалось извлечь ФИО из названия'
             })
@@ -130,47 +219,28 @@ def process_photo_uploads(uploaded_files):
         
         # Ищем студента с совпадающим ФИО
         try:
-            # Формируем варианты нормализованного ФИО из имени файла
-            parts = [p for p in re.split(r"[\s,_\-\.]+", fio_from_file.lower()) if p]
-            candidates = set()
-            if parts:
-                candidates.add(''.join(parts))
-            if len(parts) >= 2:
-                candidates.add(parts[0] + parts[1])
-                candidates.add(parts[1] + parts[0])
-            if len(parts) >= 3:
-                candidates.add(parts[0] + parts[1] + parts[2])
-                candidates.add(parts[1] + parts[0] + parts[2])
+            parts, candidates = _build_name_candidates(fio_from_file)
 
             # Логируем для отладки
             logger.debug(f"photo_upload: файл='{filename}' ФИО='{fio_from_file}' нормализованное='{norm_file_fio}' кандидаты={list(candidates)}")
 
-            # Проверяем всех студентов (нормализуем их ФИО) и пытаемся найти соответствие
-            # Собираем ВСЕХ совпадающих студентов (может быть несколько с одинаковым ФИО)
-            students = Student.objects.all()
-            matched_students = []
+            matched_student_ids = set()
 
-            for student in students:
-                # Собираем ФИО студента из полей модели
-                student_full_name = ' '.join([p for p in [getattr(student, 'last_name', '') or '', getattr(student, 'first_name', '') or '', getattr(student, 'patronymic', '') or ''] if p])
-                norm_student_fio = normalize_name(student_full_name)
+            for candidate in candidates:
+                for matched_student in exact_name_index.get(candidate, []):
+                    matched_student_ids.add(matched_student.id)
 
-                # Логируем для диагностики
-                # Если найдём точное совпадение с любым кандидатом — добавляем в список
-                if norm_student_fio in candidates:
-                    matched_students.append(student)
-                    logger.debug(f"photo_upload: совпадение по кандидату student_id={student.id} full_name='{student_full_name}'")
-                    continue
+            if not matched_student_ids and parts:
+                token_sets = [token_to_student_ids.get(part, set()) for part in parts]
+                if token_sets and all(token_sets):
+                    matched_student_ids = set.intersection(*token_sets)
 
-                # Дополнительная гибкая проверка: все части присутствуют в ФИО студента
-                if parts and all(p in norm_student_fio for p in parts):
-                    matched_students.append(student)
-                    logger.debug(f"photo_upload: частичное совпадение student_id={student.id} full_name='{student_full_name}'")
+            matched_students = [students_by_id[student_id] for student_id in sorted(matched_student_ids)]
 
             if not matched_students:
                 logger.warning(f"photo_upload: студент не найден для файла '{filename}'")
 
-                results['unmatched'].append({
+                _append_result_item(results, 'unmatched', {
                     'filename': filename,
                     'fio': fio_from_file,
                     'reason': 'Студент не найден'
@@ -185,7 +255,7 @@ def process_photo_uploads(uploaded_files):
 
                 if previous_filename:
                     overwrite_warning = f"Фото перезаписано: {previous_filename} → {filename}"
-                    results['overwritten'].append({
+                    _append_result_item(results, 'overwritten', {
                         'student_id': matched_student.id,
                         'full_name': student_full_name,
                         'previous_filename': previous_filename,
@@ -230,7 +300,7 @@ def process_photo_uploads(uploaded_files):
                     if overwrite_warning:
                         matched_item['warning'] = overwrite_warning
 
-                    results['matched'].append(matched_item)
+                    _append_result_item(results, 'matched', matched_item)
                     last_uploaded_filename_by_student[matched_student.id] = filename
                     
                 except Exception as e:
@@ -253,11 +323,11 @@ def process_photo_uploads(uploaded_files):
                     if overwrite_warning:
                         matched_item['warning'] = f"{matched_item['warning']}. {overwrite_warning}"
 
-                    results['matched'].append(matched_item)
+                    _append_result_item(results, 'matched', matched_item)
                     last_uploaded_filename_by_student[matched_student.id] = filename
         
         except Exception as e:
-            results['errors'].append({
+            _append_result_item(results, 'errors', {
                 'filename': filename,
                 'error': str(e)
             })
