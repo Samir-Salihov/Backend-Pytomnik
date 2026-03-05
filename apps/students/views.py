@@ -4,7 +4,7 @@ from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 from django.db import transaction
-from channels.layers import get_channel_layer
+# from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
 from .models import LevelByMonth, MedicalFile, Student, LevelHistory, Comment, LEVEL_CHOICES, ViolationAct  

@@ -43,11 +43,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: pytomnic_web
-<<<<<<< HEAD
-    command: gunicorn --bind 0.0.0.0:8000 --workers 4 --worker-class uvicorn.workers.UvicornWorker --timeout 1800 --graceful-timeout 120 core.asgi:application
-=======
     command: daphne -b 0.0.0.0 -p 8000 core.asgi:application
->>>>>>> 4bf245b (version server)
     volumes:
       - .:/app
       - static_volume:/app/staticfiles

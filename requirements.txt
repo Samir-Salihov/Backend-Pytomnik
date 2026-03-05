@@ -38,7 +38,6 @@ django-eventstream==5.3.2
 django-filter==25.1
 django-grip==3.5.2
 django-jazzmin==3.0.1
-django-plotly-dash==2.5.0
 django-redis==5.4.0
 django-silk==5.3.2
 django-storages==1.14.6
@@ -175,4 +174,7 @@ uvicorn[standard]==0.30.1
 channels==3.0.5
 channels_redis==3.4.0
 daphne==3.0.2
+<<<<<<< HEAD
 >>>>>>> fcbce71 (fix req.txt)
+=======
+>>>>>>> 4bf245b (version server)

@@ -65,3 +65,4 @@ AWS_S3_OBJECT_PARAMETERS = {"ACL": "public-read"}
 DEFAULT_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = '/app/media'
+CSRF_TRUSTED_ORIGINS = ["https://al-pytomnic.ru", "http://al-pytomnic.ru"]
