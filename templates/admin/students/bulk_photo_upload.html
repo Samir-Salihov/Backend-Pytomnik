@@ -481,6 +481,25 @@
     let selectedArchive = null;
     const MAX_FILES_TO_RENDER = 150;
 
+    function getCookie(name) {
+        const cookieValue = `; ${document.cookie}`;
+        const parts = cookieValue.split(`; ${name}=`);
+        if (parts.length === 2) {
+            return parts.pop().split(';').shift();
+        }
+        return null;
+    }
+
+    function getCSRFToken() {
+        const tokenFromCookie = getCookie('csrftoken');
+        if (tokenFromCookie) return tokenFromCookie;
+
+        const csrfInput = document.querySelector('[name=csrfmiddlewaretoken]');
+        if (csrfInput && csrfInput.value) return csrfInput.value;
+
+        return null;
+    }
+
     // Toast notification system
     function showToast(message, type = 'info', duration = 3000) {
         const toastDiv = document.createElement('div');
@@ -653,6 +672,14 @@
             formData.append('photos_archive', selectedArchive);
         }
 
+        const csrfToken = getCSRFToken();
+        if (!csrfToken) {
+            loading.classList.remove('show');
+            showToast('Не найден CSRF токен. Обновите страницу и повторите.', 'error', 5000);
+            return;
+        }
+        formData.append('csrfmiddlewaretoken', csrfToken);
+
         try {
             const totalToUpload = selectedFiles.length + (selectedArchive ? 1 : 0);
             showToast(`Загрузка ${totalToUpload} файла...`, 'info');
@@ -662,11 +689,38 @@
                 body: formData,
                 credentials: 'same-origin',
                 headers: {
-                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    'X-CSRFToken': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest'
                 }
             });
 
-            const data = await response.json();
+            const contentType = response.headers.get('content-type') || '';
+            let data = null;
+
+            if (contentType.includes('application/json')) {
+                try {
+                    data = await response.json();
+                } catch {
+                    data = null;
+                }
+            } else {
+                const rawBody = await response.text();
+
+                if (response.redirected || rawBody.includes('<!DOCTYPE html') || rawBody.includes('<html')) {
+                    throw new Error('Сервер вернул HTML вместо JSON. Проверь авторизацию в админке (сессия могла истечь) или 502 у nginx/gunicorn.');
+                }
+
+                throw new Error(`Сервер вернул неожиданный ответ (${response.status}).`);
+            }
+
+            if (!response.ok) {
+                const serverMessage = data?.message || data?.detail || `Ошибка загрузки (${response.status})`;
+                throw new Error(serverMessage);
+            }
+
+            if (!data) {
+                throw new Error('Сервер вернул пустой JSON-ответ');
+            }
 
             loading.classList.remove('show');
 
