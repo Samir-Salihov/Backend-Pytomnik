@@ -3,15 +3,12 @@
 Сопоставляет файлы по ФИО студентов.
 """
 import logging
-from PIL import Image
-from io import BytesIO
 import os
 import re
 import zipfile
 import mimetypes
 from collections import defaultdict
 from itertools import permutations
-from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from .models import Student
 
@@ -263,29 +260,16 @@ def process_photo_uploads(uploaded_files):
                     })
                 
                 try:
-                    # Проверяем, это ли изображение
-                    uploaded_file.seek(0)
-                    img = Image.open(uploaded_file)
-                    img_format = img.format or 'JPEG'
-                    
-                    # Переразмеряем если нужно (макс 1920x1920)
-                    max_size = (1920, 1920)
-                    img.thumbnail(max_size, Image.Resampling.LANCZOS)
-                    
-                    # Сохраняем обработанное изображение
-                    img_io = BytesIO()
-                    img.save(img_io, format=img_format)
-                    img_io.seek(0)
-                    
-                    # Сохраняем в модель
+                    # Быстрое сохранение без оптимизации для больших объёмов загрузки
                     file_extension = os.path.splitext(filename)[1].lower()
                     if not file_extension:
                         file_extension = '.jpg'
                     safe_filename = f"{norm_file_fio}{file_extension}"
+                    uploaded_file.seek(0)
                     
                     matched_student.photo.save(
                         safe_filename,
-                        ContentFile(img_io.getvalue()),
+                        uploaded_file,
                         save=True
                     )
                     
@@ -304,27 +288,7 @@ def process_photo_uploads(uploaded_files):
                     last_uploaded_filename_by_student[matched_student.id] = filename
                     
                 except Exception as e:
-                    # Ошибка при обработке изображения - просто копируем файл
-                    uploaded_file.seek(0)
-                    matched_student.photo.save(
-                        os.path.basename(filename),
-                        uploaded_file,
-                        save=True
-                    )
-                    logger.info(f"photo_upload: фото сохранено без оптимизации student_id={matched_student.id}")
-                    
-                    matched_item = {
-                        'student_id': matched_student.id,
-                        'full_name': student_full_name,
-                        'filename': filename,
-                        'warning': 'Сохранено без оптимизации'
-                    }
-
-                    if overwrite_warning:
-                        matched_item['warning'] = f"{matched_item['warning']}. {overwrite_warning}"
-
-                    _append_result_item(results, 'matched', matched_item)
-                    last_uploaded_filename_by_student[matched_student.id] = filename
+                    raise e
         
         except Exception as e:
             _append_result_item(results, 'errors', {

@@ -480,8 +480,9 @@
     let selectedFiles = [];
     let selectedArchive = null;
     const MAX_FILES_TO_RENDER = 150;
-    const BATCH_SIZE = 200;
+    const BATCH_SIZE = 25;
     const MAX_CLIENT_RESULT_DETAILS = 300;
+    const MAX_BATCH_RETRIES = 2;
 
     function getCookie(name) {
         const cookieValue = `; ${document.cookie}`;
@@ -658,6 +659,10 @@
         updateFileList();
     }
 
+    function sleep(ms) {
+        return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
     function initAggregatedResults() {
         return {
             matched: [],
@@ -767,6 +772,29 @@
         return data;
     }
 
+    async function uploadSingleRequestWithRetry(payload, retryLabel = '') {
+        let attempt = 0;
+
+        while (true) {
+            try {
+                return await uploadSingleRequest(payload);
+            } catch (error) {
+                if (attempt >= MAX_BATCH_RETRIES) {
+                    throw error;
+                }
+
+                attempt += 1;
+                const backoffMs = 1500 * attempt;
+                showToast(
+                    `Повтор ${attempt}/${MAX_BATCH_RETRIES} для ${retryLabel || 'пакета'} через ${Math.round(backoffMs / 1000)} сек...`,
+                    'warning',
+                    2500
+                );
+                await sleep(backoffMs);
+            }
+        }
+    }
+
     uploadForm.addEventListener('submit', async (e) => {
         e.preventDefault();
 
@@ -804,10 +832,10 @@
                     2500
                 );
 
-                const batchData = await uploadSingleRequest({
+                const batchData = await uploadSingleRequestWithRetry({
                     files: filesBatch,
                     csrfToken,
-                });
+                }, `пакета ${requestNumber}`);
 
                 mergeBatchResults(aggregatedResults, batchData.results);
             }
@@ -820,10 +848,10 @@
                     3000
                 );
 
-                const archiveData = await uploadSingleRequest({
+                const archiveData = await uploadSingleRequestWithRetry({
                     archive: selectedArchive,
                     csrfToken,
-                });
+                }, 'архива');
 
                 mergeBatchResults(aggregatedResults, archiveData.results);
             }
