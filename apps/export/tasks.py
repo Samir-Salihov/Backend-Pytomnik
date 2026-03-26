@@ -3,7 +3,7 @@ from celery import shared_task
 from .services import generate_excel_stream
 from django.conf import settings
 import os
-from datetime import timezone
+from django.utils import timezone
 
 @shared_task
 def async_export_excel():

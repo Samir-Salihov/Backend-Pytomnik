@@ -1,7 +1,7 @@
 #urls
 from django.contrib import admin
 from django.urls import path, include
-from apps.hr_calls.views import HrCallCreateView, HrCallDetailView, HrCallListView, HrCommentCreateView, HrCommentDetailView, HrCommentListView, HrFileCreateView, HrFileDeleteView, HrFileListView
+from apps.hr_calls.views import HrCallCreateView, HrCallDetailView, HrCallListView, HrCommentCreateView, HrCommentDetailView, HrCommentListView, HrFileCreateView, HrFileDeleteView, HrFileListView, HrCallExportExcelView
 from apps.users.views import (
     CustomLoginView,
     RegisterView,
@@ -22,9 +22,8 @@ from apps.kanban.views import KanbanBoardDetailView, MoveCardView, KanbanBoardCr
 
 from apps.export.views import ExportStudentsExcelView
 
-from apps.analytics.views import AnalyticsDashboardView, LevelDistributionView
+from apps.analytics.views import AnalyticsDashboardView, LevelDistributionView, AnalyticsDownloadView, analytics_download_view
 
-from apps.analytics.admin import AnalyticsAdmin 
 
 from apps.students.views import ViolationActListView, ViolationActUploadView, ViolationActDeleteView
 
@@ -62,10 +61,12 @@ urlpatterns = [
     path('dashboard/', AnalyticsDashboardView.as_view(), name='analytics-dashboard'),
     path('levels/', LevelDistributionView.as_view(), name='level-distribution'),
     path('boards/create/', KanbanBoardCreateView.as_view(), name='kanban-board-create'),
+    path('analytics/download/', AnalyticsDownloadView.as_view(), name='analytics-download-api'),
 
     path('hr-calls/', HrCallListView.as_view(), name='hr_call_list'),
     path('hr-calls/create/', HrCallCreateView.as_view(), name='hr_call_create'),
     path('hr-calls/<int:pk>/', HrCallDetailView.as_view(), name='hr_call_detail'),
+    path('hr-calls/export/', HrCallExportExcelView.as_view(), name='hr_call_export_excel'),
 
     path('hr-calls/<int:pk>/comments/', HrCommentListView.as_view(), name='hr_comment_list'),
     path('hr-calls/<int:pk>/comments/create/', HrCommentCreateView.as_view(), name='hr_comment_create'),

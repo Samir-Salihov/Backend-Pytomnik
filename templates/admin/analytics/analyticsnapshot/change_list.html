@@ -1,0 +1,348 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static admin_list %}
+
+{% block title %}{{ title }} | {% trans 'Analytics Dashboard' %}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="stylesheet" type="text/css" href="{% static "admin/css/changelists.css" %}">
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{% trans 'Analytics' %}</a>
+    &rsaquo; <a href="{% url 'admin:analytics_analyticssnapshot_changelist' %}">{% trans 'Analytics Snapshot' %}</a>
+    &rsaquo; {% trans 'Dashboard' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <div class="analytics-dashboard">
+        <div class="analytics-header">
+            <h1>{% trans 'Analytics Dashboard' %}</h1>
+            <p class="analytics-subtitle">{% trans 'Comprehensive statistics and insights for student management' %}</p>
+        </div>
+
+        {% if cl.result_list %}
+        {% for obj in cl.result_list %}
+        <div class="analytics-overview">
+            <div class="overview-grid">
+                <div class="metric-card total-students">
+                    <div class="metric-icon">👥</div>
+                    <div class="metric-content">
+                        <div class="metric-label">{% trans 'Total Students' %}</div>
+                        <div class="metric-value">{{ obj.total_students }}</div>
+                    </div>
+                </div>
+                
+                <div class="metric-card active-students">
+                    <div class="metric-icon">✅</div>
+                    <div class="metric-content">
+                        <div class="metric-label">{% trans 'Active Students' %}</div>
+                        <div class="metric-value">{{ obj.active_students }}</div>
+                    </div>
+                </div>
+                
+                <div class="metric-card fired-students">
+                    <div class="metric-icon">❌</div>
+                    <div class="metric-content">
+                        <div class="metric-label">{% trans 'Fired Students' %}</div>
+                        <div class="metric-value">{{ obj.fired_students }}</div>
+                    </div>
+                </div>
+                
+                <div class="metric-card hr-calls">
+                    <div class="metric-icon">📞</div>
+                    <div class="metric-content">
+                        <div class="metric-label">{% trans 'HR Calls' %}</div>
+                        <div class="metric-value">{{ obj.called_hr_students }}</div>
+                    </div>
+                </div>
+                
+                <div class="metric-card new-students">
+                    <div class="metric-icon">🆕</div>
+                    <div class="metric-content">
+                        <div class="metric-label">{% trans 'New Students (Month)' %}</div>
+                        <div class="metric-value">{{ obj.new_students_total }}</div>
+                    </div>
+                </div>
+                
+                <div class="metric-card level-changes">
+                    <div class="metric-icon">📈</div>
+                    <div class="metric-content">
+                        <div class="metric-label">{% trans 'Level Changes (Month)' %}</div>
+                        <div class="metric-value">{{ obj.level_changes_total }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="analytics-details">
+            <div class="details-grid">
+                <div class="distribution-section">
+                    <h3>{% trans 'Distribution by Level' %}</h3>
+                    <div class="distribution-list">
+                        {% for level, count in obj.distribution_by_level.items %}
+                        <div class="distribution-item">
+                            <span class="level-name">{{ level|title }}</span>
+                            <span class="level-count">{{ count }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="distribution-section">
+                    <h3>{% trans 'Distribution by Status' %}</h3>
+                    <div class="distribution-list">
+                        {% for status, count in obj.distribution_by_status.items %}
+                        <div class="distribution-item">
+                            <span class="status-name">{{ status|title }}</span>
+                            <span class="status-count">{{ count }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="distribution-section">
+                    <h3>{% trans 'Distribution by Category' %}</h3>
+                    <div class="distribution-list">
+                        {% for category, count in obj.distribution_by_category.items %}
+                        <div class="distribution-item">
+                            <span class="category-name">{{ category|title }}</span>
+                            <span class="category-count">{{ count }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="analytics-footer">
+            <div class="last-updated">
+                <strong>{% trans 'Last Updated:' %}</strong> {{ obj.updated_at|date:"d.m.Y H:i:s" }}
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="no-data">
+            <h3>{% trans 'No analytics data available' %}</h3>
+            <p>{% trans 'Please ensure that analytics data has been generated.' %}</p>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if test_buttons %}
+    <div class="test-actions">
+        <h3>{% trans 'Test Analytics Downloads' %}</h3>
+        <div class="action-buttons">
+            <a href="{% url 'analytics-test-full-download' %}" class="button test-full">
+                📊 {% trans 'Test Full Analytics Download' %}
+            </a>
+            <a href="{% url 'analytics-test-month-download' %}" class="button test-month">
+                📈 {% trans 'Test Month Analytics Download' %}
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+    .analytics-dashboard {
+        background: #ffffff;
+        border-radius: 12px;
+        padding: 24px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        margin-bottom: 24px;
+    }
+
+    .analytics-header {
+        margin-bottom: 24px;
+        border-bottom: 2px solid #e5e7eb;
+        padding-bottom: 16px;
+    }
+
+    .analytics-header h1 {
+        color: #1f2937;
+        margin: 0;
+        font-size: 28px;
+        font-weight: 700;
+    }
+
+    .analytics-subtitle {
+        color: #6b7280;
+        margin: 8px 0 0 0;
+        font-size: 14px;
+    }
+
+    .overview-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+        margin-bottom: 32px;
+    }
+
+    .metric-card {
+        background: #f9fafb;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 16px;
+        display: flex;
+        align-items: center;
+        transition: all 0.3s ease;
+    }
+
+    .metric-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .metric-icon {
+        font-size: 24px;
+        margin-right: 12px;
+    }
+
+    .metric-content {
+        flex: 1;
+    }
+
+    .metric-label {
+        font-size: 12px;
+        color: #6b7280;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 4px;
+    }
+
+    .metric-value {
+        font-size: 24px;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .total-students .metric-card { border-left: 4px solid #3b82f6; }
+    .active-students .metric-card { border-left: 4px solid #10b981; }
+    .fired-students .metric-card { border-left: 4px solid #ef4444; }
+    .hr-calls .metric-card { border-left: 4px solid #f59e0b; }
+    .new-students .metric-card { border-left: 4px solid #8b5cf6; }
+    .level-changes .metric-card { border-left: 4px solid #06b6d4; }
+
+    .analytics-details {
+        background: #f9fafb;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 24px;
+    }
+
+    .details-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+    }
+
+    .distribution-section h3 {
+        margin: 0 0 12px 0;
+        color: #374151;
+        font-size: 16px;
+        font-weight: 600;
+    }
+
+    .distribution-list {
+        background: white;
+        border-radius: 6px;
+        padding: 12px;
+    }
+
+    .distribution-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .distribution-item:last-child {
+        border-bottom: none;
+    }
+
+    .level-name, .status-name, .category-name {
+        font-weight: 500;
+        color: #374151;
+    }
+
+    .level-count, .status-count, .category-count {
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .analytics-footer {
+        background: #f3f4f6;
+        border-radius: 6px;
+        padding: 12px;
+        text-align: right;
+    }
+
+    .last-updated {
+        color: #6b7280;
+        font-size: 14px;
+    }
+
+    .test-actions {
+        background: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 20px;
+    }
+
+    .test-actions h3 {
+        margin: 0 0 16px 0;
+        color: #374151;
+        font-size: 18px;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .button.test-full {
+        background: #3b82f6;
+        color: white;
+        padding: 10px 20px;
+        border-radius: 6px;
+        text-decoration: none;
+        font-weight: 600;
+        transition: background 0.3s ease;
+    }
+
+    .button.test-full:hover {
+        background: #2563eb;
+    }
+
+    .button.test-month {
+        background: #10b981;
+        color: white;
+        padding: 10px 20px;
+        border-radius: 6px;
+        text-decoration: none;
+        font-weight: 600;
+        transition: background 0.3s ease;
+    }
+
+    .button.test-month:hover {
+        background: #059669;
+    }
+
+    .no-data {
+        text-align: center;
+        padding: 40px;
+        color: #6b7280;
+    }
+
+    .no-data h3 {
+        margin: 0 0 8px 0;
+        color: #374151;
+    }
+</style>
+{% endblock %}

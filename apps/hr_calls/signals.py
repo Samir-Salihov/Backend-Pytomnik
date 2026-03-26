@@ -4,7 +4,6 @@ import logging
 
 from apps.students.models import Student
 from .models import HrCall
-from apps.analytics.signals import update_analytics_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +20,6 @@ def track_status_change(sender, instance, **kwargs):
 def cleanup_previous_status(sender, instance, **kwargs):
     if hasattr(instance, '_previous_status'):
         delattr(instance, '_previous_status')
-    update_analytics_snapshot()
 
 @receiver(post_save, sender=HrCall)
 def update_student_hr_status(sender, instance, **kwargs):

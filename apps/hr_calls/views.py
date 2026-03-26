@@ -1,16 +1,21 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.authentication import SessionAuthentication
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 
 from utils.permissions import HRTEVOrAdminPermission
 from .models import HrCall, HrComment, HrFile
+from .services import generate_hr_calls_excel_stream
 from .serializers import (
     HrCallSerializer, HrCallCreateSerializer, HrCallUpdateSerializer,
     HrCommentCreateSerializer, HrCommentSerializer, HrCommentUpdateSerializer,
     HrFileCreateSerializer, HrFileSerializer
 )
+from django.http import HttpResponse
+from io import BytesIO
+from django.utils import timezone
 
 
 class HrCallListView(APIView):
@@ -215,3 +220,21 @@ class HrFileDeleteView(APIView):
             "success": True,
             "message": "Файл удалён"
         }, status=status.HTTP_204_NO_CONTENT)
+
+
+class HrCallExportExcelView(APIView):
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [HRTEVOrAdminPermission]
+
+    def get(self, request):
+        wb = generate_hr_calls_excel_stream()
+        buffer = BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+
+        response = HttpResponse(
+            buffer.getvalue(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        response['Content-Disposition'] = f'attachment; filename="hr_calls_{timezone.now():%Y%m%d_%H%M%S}.xlsx"'
+        return response

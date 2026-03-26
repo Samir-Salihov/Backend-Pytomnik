@@ -8,21 +8,25 @@ from apps.students.models import Student, LevelByMonth
 def generate_excel_stream():
     wb = Workbook()
     ws = wb.active
-    ws.title = "Колледжисты"
+    ws.title = "Коты"
 
     # Стили
     header_font = Font(bold=True, color="FFFFFF")
     header_fill = PatternFill("solid", fgColor="1E40AF")
-    separator_fill = PatternFill("solid", fgColor="3B82F6")  # синий разделитель
+    separator_fill = PatternFill("solid", fgColor="1D4ED8")  # более насыщенный синий разделитель
     separator_font = Font(bold=True, color="FFFFFF")
     center = Alignment(horizontal="center", vertical="center")
-    border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+    thin = Side(style='thin')
+    thick = Side(style='thick')
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    separator_border = Border(left=thick, right=thick, top=thick, bottom=thick)
 
     # Базовые заголовки
     base_headers = [
-        "ФИО", "Имя", "Фамилия", "Отчество", "Возраст", "Текущий уровень", "Текущая дата увольнения",
+        "№",
+        "ФИО", "Имя", "Фамилия", "Отчество", "Возраст", "Текущий уровень", "Дата увольнения",
         "Статус", "Категория", "Направление", "Подразделение", "Личный телефон", "Telegram",
-        "Телефон родителя", "ФИО родителя", "Адрес фактический", "Адрес по прописке", "Медицинские данные",
+        "Телефон родителя", "ФИО родителя", "Адрес фактический", "Адрес по прописке",
         "Создан", "Кем создан", "Изменён"
     ]
 
@@ -34,6 +38,14 @@ def generate_excel_stream():
             calendar_headers.append(f"{month_name} {year}")
 
     headers = base_headers + calendar_headers
+
+    def format_fired_date(d):
+        if not d:
+            return "—"
+        # Автоматически определяем точность по дню
+        if d.day == 1:
+            return f"{months_ru[d.month - 1]} {d.year}"
+        return d.strftime('%d.%m.%Y')
 
     # Запись заголовков
     for col_num, header in enumerate(headers, start=1):
@@ -63,48 +75,80 @@ def generate_excel_stream():
         for lbm in student.level_by_month.all():
             lbm_dict[student.id][(lbm.year, lbm.month)] = lbm
 
-    # Порядок категорий
+    # Порядок категорий и их человекочитаемые названия
     category_order = [
-        'college', 'alabuga_mulatki', 'alabuga_start_sng', 'patriot', 'alabuga_start_rf'
+        'college',
+        'alabuga_start_sng',
+        'alabuga_start_rf',
+        'alabuga_mulatki',
+        'patriot',
     ]
     category_names = {
         'college': 'Колледжисты',
-        'alabuga_mulatki': 'Алабуга Старт МИР',
-        'alabuga_start_sng': 'Алабуга Старт СНГ',
+        'alabuga_mulatki': 'АС',
+        'alabuga_start_sng': 'АС',
         'patriot': 'Патриоты',
-        'alabuga_start_rf': 'Алабуга Старт РФ',
+        'alabuga_start_rf': 'АС',
+    }
+
+    # Порядок уровней внутри категории
+    level_order = {
+        'green': 0,
+        'yellow': 1,
+        'red': 2,
+        'black': 3,
+        '': 4,          # без уровня
+        None: 4,
+        'fired': 5,     # уволенные в конце
     }
 
     row_num = 2
 
+    today = timezone.now().date()
+    # "последний месяц" = предыдущий календарный месяц
+    first_this_month = today.replace(day=1)
+    prev_month_end = first_this_month - timezone.timedelta(days=1)
+    prev_month_start = prev_month_end.replace(day=1)
+
     for cat in category_order:
         students_in_cat = [s for s in queryset if s.category == cat]
-        students_in_cat.sort(key=lambda s: s.full_name)
+        # сортировка по уровню и ФИО
+        students_in_cat.sort(key=lambda s: (level_order.get(s.level, 99), s.full_name))
 
         if students_in_cat:
             # Разделитель
-            separator_text = f"=== КАТЕГОРИЯ: {category_names.get(cat, cat.upper())} ==="
+            separator_text = category_names.get(cat, cat.upper())
             for col in range(1, len(headers) + 1):
                 cell = ws.cell(row=row_num, column=col)
                 if col == 1:
                     cell.value = separator_text
                 cell.fill = separator_fill
-                cell.font = separator_font
+                # более толстая и заметная разделительная строка
+                cell.font = Font(bold=True, color="FFFFFF", size=13)
                 cell.alignment = center
-                cell.border = border
+                cell.border = separator_border
+            # увеличим высоту строки-разделителя
+            ws.row_dimensions[row_num].height = 25
             row_num += 1
 
             # Студенты
+            counter = 1
             for student in students_in_cat:
+                # дата увольнения за последний месяц по основному полю fired_date
+                fired_last_month = None
+                if student.fired_date and prev_month_start <= student.fired_date <= prev_month_end:
+                    fired_last_month = student.fired_date
+
                 # prepare raw values and track level keys for coloring
                 base_values = [
+                    counter,
                     student.full_name,
                     student.first_name,
                     student.last_name,
                     student.patronymic or "—",
                     student.age or "—",
                     student.get_level_display(),
-                    student.fired_date.strftime('%d.%m.%Y') if student.fired_date else "—",
+                    format_fired_date(fired_last_month) if fired_last_month else "—",
                     student.get_status_display(),
                     student.get_category_display(),
                     student.get_direction_display() or student.direction or "—",
@@ -115,7 +159,6 @@ def generate_excel_stream():
                     student.fio_parent,
                     student.address_actual or "—",
                     student.address_registered or "—",
-                    student.medical_info or "—",
                     student.created_at.strftime("%d.%m.%Y %H:%M"),
                     student.created_by.get_full_name() if student.created_by else "—",
                     student.updated_at.strftime("%d.%m.%Y %H:%M"),
@@ -131,7 +174,7 @@ def generate_excel_stream():
                         if lbm and lbm.level:
                             display = lbm.get_level_display()
                             if lbm.level == 'fired' and lbm.fired_date:
-                                display += f" ({lbm.fired_date.strftime('%d.%m.%Y')})"
+                                display += f" ({format_fired_date(lbm.fired_date)})"
                             calendar_entries.append((display, lbm.level))
                         else:
                             calendar_entries.append(("—", None))
@@ -141,10 +184,10 @@ def generate_excel_stream():
                 for col_idx, value in enumerate(full_values, start=1):
                     cell = ws.cell(row=row_num, column=col_idx, value=value)
                     cell.border = border
-                    cell.alignment = center
+                    cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-                    # color current level column (index 6)
-                    if col_idx == 6:
+                    # color current level column (index 7: с учётом колонки №)
+                    if col_idx == 7:
                         fill = level_fill_map.get(current_level_key, None)
                         if fill:
                             cell.fill = fill
@@ -156,11 +199,20 @@ def generate_excel_stream():
                         if fill:
                             cell.fill = fill
                 row_num += 1
+                counter += 1
 
-    # Автоширина
-    for col_num, column_cells in enumerate(ws.columns, start=1):
-        max_length = max(len(str(cell.value or "")) for cell in column_cells)
-        ws.column_dimensions[get_column_letter(col_num)].width = min(max_length + 4, 60)
+    # Единая аккуратная ширина колонок (одинаковая в группе)
+    for col_num, _ in enumerate(ws.columns, start=1):
+        letter = get_column_letter(col_num)
+        if col_num <= len(base_headers):
+            ws.column_dimensions[letter].width = 22
+        else:
+            ws.column_dimensions[letter].width = 16
+
+    # Высота строк, чтобы весь текст был виден и выглядел ровно
+    for r in range(2, row_num):
+        if ws.row_dimensions[r].height is None:
+            ws.row_dimensions[r].height = 22
 
     # Заморозка шапки
     ws.freeze_panes = "A2"

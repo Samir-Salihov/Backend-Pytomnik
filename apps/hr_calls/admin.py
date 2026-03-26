@@ -19,7 +19,7 @@ class HrFileInline(admin.TabularInline):
 @admin.register(HrCall)
 class HrCallAdmin(admin.ModelAdmin):
     list_display = (
-        'id', 'get_person_name', 'person_type', 'reason_short', 'solution_short', 
+        'id', 'get_person_name', 'person_type', 'category', 'reason_short', 'solution_short',
         'visit_datetime', 'problem_resolved', 'created_by', 'created_at', 
     )
     list_filter = ('person_type', 'visit_datetime')
@@ -28,8 +28,10 @@ class HrCallAdmin(admin.ModelAdmin):
     ordering = ['-created_at']
     readonly_fields = ('created_at', 'updated_at', 'created_by')
 
+    change_list_template = "admin/hr_calls/hrcall_changelist.html"
+
     def get_person_name(self, obj):
-        if obj.person_type == 'student' and obj.student:
+        if obj.person_type == 'cat' and obj.student:
             return obj.student.full_name
         return obj.full_name
     get_person_name.short_description = "ФИО"
@@ -47,6 +49,32 @@ class HrCallAdmin(admin.ModelAdmin):
         if obj and obj.problem_resolved:
             fields += ('problem_resolved',)  # readonly если решено
         return fields
+
+    def save_model(self, request, obj, form, change):
+        if not obj.created_by:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)
+
+    # Полный доступ для hr_tev в админке
+    def has_view_permission(self, request, obj=None):
+        if getattr(request.user, "role", None) == "hr_tev":
+            return True
+        return super().has_view_permission(request, obj)
+
+    def has_change_permission(self, request, obj=None):
+        if getattr(request.user, "role", None) == "hr_tev":
+            return True
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if getattr(request.user, "role", None) == "hr_tev":
+            return True
+        return super().has_delete_permission(request, obj)
+
+    def has_add_permission(self, request):
+        if getattr(request.user, "role", None) == "hr_tev":
+            return True
+        return super().has_add_permission(request)
 
 
 @admin.register(HrComment)

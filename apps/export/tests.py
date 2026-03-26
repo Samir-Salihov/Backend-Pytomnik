@@ -56,13 +56,14 @@ class ExportIntegrationTests(TestCase):
 
         wb = generate_excel_stream()
         ws = wb.active
+        self.assertEqual(ws.title, 'Коты')
         # locate the row by name
         found = False
         for row in ws.iter_rows(min_row=2):
             if row[0].value == 'User Test':  # last + first
                 found = True
-                # current level column is F (6th)
-                level_cell = row[5]
+                # current level column moved due to leading № column
+                level_cell = row[6]
                 self.assertEqual(level_cell.fill.fgColor.rgb.upper(), '00FFFF00')
                 # first calendar column is after base headers later; locate index
                 break

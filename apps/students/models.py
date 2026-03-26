@@ -206,6 +206,10 @@ class Student(models.Model):
         if self.fired_date and self.level != 'fired':
             errors['fired_date'] = "Дата увольнения может быть указана только для уровня 'Уволен'"
         
+        # Автоматическое определение точности даты увольнения
+        if self.fired_date:
+            self._determine_fired_date_precision()
+        
         if errors:
             raise ValidationError(errors)
 
@@ -218,6 +222,31 @@ class Student(models.Model):
             self.status = 'active'
 
         super().save(*args, **kwargs)
+
+    def _determine_fired_date_precision(self):
+        """
+        Автоматически определяет точность даты увольнения:
+        - Если день = 1, то это месяц и год
+        - Иначе точная дата
+        """
+        if self.fired_date:
+            # Добавляем атрибут для отслеживания точности
+            if self.fired_date.day == 1:
+                self._fired_date_precision = 'month'
+            else:
+                self._fired_date_precision = 'day'
+
+    @property
+    def fired_date_precision(self):
+        """Возвращает точность даты увольнения"""
+        if not self.fired_date:
+            return None
+        if hasattr(self, '_fired_date_precision'):
+            return self._fired_date_precision
+        # Определяем точность при первом обращении
+        if self.fired_date.day == 1:
+            return 'month'
+        return 'day'
 
 
 class LevelHistory(models.Model):

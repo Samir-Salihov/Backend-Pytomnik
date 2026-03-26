@@ -41,14 +41,14 @@ class HrCallSerializer(serializers.ModelSerializer):
     class Meta:
         model = HrCall
         fields = [
-            'id', 'person_type', 'student', 'full_name', 'reason', 'solution',
+            'id', 'person_type', 'category', 'student', 'full_name', 'reason', 'solution',
             'visit_datetime', 'created_by_username', 'created_at', 'updated_at',
             'comments', 'files', 'problem_resolved'
         ]
         read_only_fields = ['id', 'created_by_username', 'created_at', 'updated_at', 'comments', 'files']
 
     def get_full_name(self, obj):
-        if obj.person_type == 'student' and obj.student:
+        if obj.person_type == 'cat' and obj.student:
             return obj.student.full_name
         return obj.full_name
 
@@ -60,10 +60,8 @@ class HrCallCreateSerializer(serializers.ModelSerializer):
 
     def validate_person_type(self, value):
         """Валидирует тип лица"""
-        if value not in ['student', 'college']:
-            raise InvalidPersonTypeException(
-                "Тип лица должен быть 'student' (кот) или 'college' (колледжист)"
-            )
+        if value not in ['cat', 'not_cat']:
+            raise InvalidPersonTypeException("Тип должен быть 'cat' (Кот) или 'not_cat' (Не кот)")
         return value
 
     def validate_full_name(self, value):
@@ -101,18 +99,13 @@ class HrCallCreateSerializer(serializers.ModelSerializer):
         student = attrs.get('student')
         full_name = attrs.get('full_name')
         
-        # Проверка для типа 'student'
-        if person_type == 'student':
-            raise AutomaticHrCallException(
-                "Для студентов вызовы создаются автоматически при смене статуса. "
-                "Не создавайте вызовы вручную для студентов."
-            )
-        
-        # Проверка для типа 'college'
-        if person_type == 'college' and not full_name:
-            raise MissingFullNameException(
-                "Для типа 'college' (колледжист) необходимо указать ФИО"
-            )
+        # Для "кот" можно выбирать кота из базы (student). Если student не указан — требуем ФИО.
+        if person_type == 'cat' and not student and not (full_name and str(full_name).strip()):
+            raise MissingStudentException("Для типа 'cat' укажите кота (student) или заполните ФИО")
+
+        # Для "не кот" — обязательное ФИО
+        if person_type == 'not_cat' and not (full_name and str(full_name).strip()):
+            raise MissingFullNameException("Для типа 'not_cat' необходимо указать ФИО")
         
         return attrs
 
@@ -166,7 +159,7 @@ class HrCallUpdateSerializer(serializers.ModelSerializer):
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
 
-        # Если проблема решена (problem_resolved = True) и это вызов для студента
+        # Если проблема решена (problem_resolved = True) и это вызов для кота из базы
         if validated_data.get('problem_resolved') is True and instance.student:
             # Возвращаем статус студента на 'active'
             instance.student.status = 'active'

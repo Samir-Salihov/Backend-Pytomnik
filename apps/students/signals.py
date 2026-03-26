@@ -6,7 +6,6 @@ import logging
 from apps.hr_calls.models import HrCall
 
 from .models import Student, LevelHistory, LevelByMonth
-from apps.analytics.signals import update_analytics_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -251,8 +250,6 @@ def sync_kanban_card_and_hr_call(sender, instance, created, **kwargs):
     for attr in ('_previous_level', '_previous_category', '_previous_is_called_to_hr', '_change_comment'):
         if hasattr(instance, attr):
             delattr(instance, attr)
-
-    update_analytics_snapshot()
 
 # Синхронизация изменения в календаре → student.level и fired_date (для текущего месяца)
 @receiver(post_save, sender=LevelByMonth)

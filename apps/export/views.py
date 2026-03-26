@@ -38,41 +38,66 @@ class ExportStudentsExcelView(APIView):
             months_ru = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
             calendar_headers = [f"{m} {y}" for y in range(2023, 2027) for m in months_ru]
 
+            def format_fired_date(d, precision):
+                if not d:
+                    return "—"
+                if precision == 'month':
+                    return f"{months_ru[d.month - 1]} {d.year}"
+                return d.strftime('%d.%m.%Y')
+
             base_headers = [
-                "ФИО", "Имя", "Фамилия", "Отчество", "Возраст", "Текущий уровень", "Текущая дата увольнения",
+                "№",
+                "ФИО", "Имя", "Фамилия", "Отчество", "Возраст", "Текущий уровень", "Дата увольнения",
                 "Статус", "Категория", "Направление", "Подразделение", "Личный телефон", "Telegram",
-                "Телефон родителя", "ФИО родителя", "Адрес фактический", "Адрес по прописке", "Медицинские данные",
+                "Телефон родителя", "ФИО родителя", "Адрес фактический", "Адрес по прописке",
                 "Создан", "Кем создан", "Изменён"
             ]
             headers = base_headers + calendar_headers
 
             data = []
 
-            category_order = ['college', 'alabuga_mulatki', 'alabuga_start_sng', 'patriot', 'alabuga_start_rf']
+            category_order = ['college', 'alabuga_start_sng', 'alabuga_start_rf', 'alabuga_mulatki', 'patriot']
             category_names = {
                 'college': 'Колледжисты',
-                'alabuga_mulatki': 'Алабуга Старт МИР',
-                'alabuga_start_sng': 'Алабуга Старт СНГ',
+                'alabuga_mulatki': 'АС',
+                'alabuga_start_sng': 'АС',
                 'patriot': 'Патриоты',
-                'alabuga_start_rf': 'Алабуга Старт РФ',
+                'alabuga_start_rf': 'АС',
             }
+
+            level_order = {'green': 0, 'yellow': 1, 'red': 2, 'black': 3, '': 4, None: 4, 'fired': 5}
+            today = timezone.now().date()
+            # "последний месяц" = предыдущий календарный месяц
+            first_this_month = today.replace(day=1)
+            prev_month_end = first_this_month - timezone.timedelta(days=1)
+            prev_month_start = prev_month_end.replace(day=1)
 
             for cat in category_order:
                 students_in_cat = [s for s in queryset if s.category == cat]
-                students_in_cat.sort(key=lambda s: s.full_name)
+                students_in_cat.sort(key=lambda s: (level_order.get(s.level, 99), s.full_name))
 
                 if students_in_cat:
-                    data.append([f"=== КАТЕГОРИЯ: {category_names.get(cat, cat.upper())} ==="] + [""] * (len(headers) - 1))
+                    data.append([category_names.get(cat, cat.upper())] + [""] * (len(headers) - 1))
 
+                    counter = 1
                     for student in students_in_cat:
+                        # дата увольнения за последний месяц по основному полю fired_date
+                        fired_last_month = None
+                        if student.fired_date and prev_month_start <= student.fired_date <= prev_month_end:
+                            fired_last_month = student.fired_date
+
                         row = [
+                            counter,
                             student.full_name,
                             student.first_name,
                             student.last_name,
                             student.patronymic or "—",
                             student.age or "—",
                             student.get_level_display(),
-                            student.fired_date.strftime('%d.%m.%Y') if student.fired_date else "—",
+                            format_fired_date(
+                                fired_last_month,
+                                getattr(student, 'fired_date_precision', None),
+                            ) if fired_last_month else "—",
                             student.get_status_display(),
                             student.get_category_display(),
                             student.direction or "—",
@@ -83,7 +108,6 @@ class ExportStudentsExcelView(APIView):
                             student.fio_parent,
                             student.address_actual or "—",
                             student.address_registered or "—",
-                            student.medical_info or "—",
                             student.created_at.strftime("%d.%m.%Y %H:%M"),
                             student.created_by.get_full_name() if student.created_by else "—",
                             student.updated_at.strftime("%d.%m.%Y %H:%M"),
@@ -96,12 +120,13 @@ class ExportStudentsExcelView(APIView):
                                 if lbm and lbm.level:
                                     display = lbm.get_level_display()
                                     if lbm.level == 'fired' and lbm.fired_date:
-                                        display += f" ({lbm.fired_date.strftime('%d.%m.%Y')})"
+                                        display += f" ({format_fired_date(lbm.fired_date, getattr(lbm, 'fired_date_precision', None))})"
                                     row.append(display)
                                 else:
                                     row.append("—")
 
                         data.append(row)
+                        counter += 1
 
             df = pd.DataFrame(data, columns=headers)
 

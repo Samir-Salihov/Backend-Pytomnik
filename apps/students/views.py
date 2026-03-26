@@ -130,7 +130,7 @@ class StudentUpdateView(APIView):
 
 
 class StudentDeleteView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [HRTEVOrAdminPermission]
 
     def delete(self, request, pk):
         student = get_object_or_404(Student, pk=pk)
@@ -275,7 +275,7 @@ class CommentUpdateView(APIView):
 
 
 class CommentDeleteView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [HRTEVOrAdminPermission]
 
     def delete(self, request, pk):
         comment = get_object_or_404(Comment, pk=pk)
@@ -327,7 +327,7 @@ class MedicalFileUploadView(APIView):
 
 
 class MedicalFileDeleteView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [HRTEVOrAdminPermission]
 
     def delete(self, request, student_pk, pk):
         medical_file = get_object_or_404(MedicalFile, pk=pk, student_id=student_pk)
@@ -453,7 +453,7 @@ class ViolationActUploadView(APIView):
 
 
 class ViolationActDeleteView(APIView):
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [HRTEVOrAdminPermission]
 
     def delete(self, request, student_pk, pk):
         act = get_object_or_404(ViolationAct, pk=pk, student_id=student_pk)

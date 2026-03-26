@@ -1,0 +1,62 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block extrastyle %}
+<style>
+  .hr-actions {
+    display: flex;
+    justify-content: center;
+    margin: 30px 0;
+  }
+  .hr-card {
+    min-width: 380px;
+    padding: 30px 40px;
+    border-radius: 20px;
+    background: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%);
+    color: #ecfeff;
+    text-align: center;
+    box-shadow: 0 18px 40px rgba(15,118,110,0.45);
+  }
+  .hr-card-title {
+    font-size: 26px;
+    font-weight: 700;
+    margin-bottom: 10px;
+  }
+  .hr-card-desc {
+    font-size: 16px;
+    margin-bottom: 22px;
+    opacity: 0.95;
+  }
+  .hr-card-btn {
+    display: inline-block;
+    padding: 14px 32px;
+    border-radius: 999px;
+    background: #ecfeff;
+    color: #0f766e;
+    font-weight: 700;
+    font-size: 18px;
+    text-decoration: none;
+    box-shadow: 0 10px 22px rgba(0,0,0,0.25);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .hr-card-btn:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 14px 30px rgba(0,0,0,0.32);
+  }
+</style>
+{% endblock %}
+
+{% block object-tools %}
+<div class="hr-actions">
+  <div class="hr-card">
+    <div class="hr-card-title">Выгрузка вызовов к HR</div>
+    <div class="hr-card-desc">Скачать все вызовы к HR в Excel с ФИО, типом (Кот/Не кот), категорией и статусами.</div>
+    <a href="{% url 'hr_call_export_excel' %}" class="hr-card-btn">
+      Скачать Excel
+    </a>
+  </div>
+</div>
+
+{{ block.super }}
+{% endblock %}
+

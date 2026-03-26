@@ -8,6 +8,7 @@ from django.http import HttpResponse
 from django.utils import timezone
 from io import BytesIO
 from .models import Student, LevelHistory, Comment, MedicalFile, LevelByMonth, ViolationAct, CATEGORY_CHOICES
+from .forms import PartialDateField
 import pandas as pd
 from django.urls import reverse
 from apps.hr_calls.models import HrCall
@@ -57,8 +58,32 @@ class ExcelImportForm(forms.Form):
     )
 
 
+def format_fired_date_for_admin(d):
+    """Format fired date for admin: day -> dd.mm.yyyy, month -> Russian month + year."""
+    if not d:
+        return "—"
+    # Автоматически определяем точность по дню
+    if d.day == 1:
+        months_ru = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+        return f"{months_ru[d.month - 1]} {d.year}"
+    return d.strftime('%d.%m.%Y')
+
+
+class StudentAdminForm(forms.ModelForm):
+    fired_date = PartialDateField(
+        label='Дата увольнения',
+        required=False,
+        help_text='Форматы: 01.01.2025 (день), 01.2025 (месяц), Январь 2025 (месяц)'
+    )
+    
+    class Meta:
+        model = Student
+        fields = '__all__'
+
+
 @admin.register(Student)
 class StudentAdmin(admin.ModelAdmin):
+    form = StudentAdminForm
     inlines = [MedicalFileInline, LevelByMonthInline, LevelHistoryInline, ViolationActInline]
 
     list_display = (
@@ -71,6 +96,7 @@ class StudentAdmin(admin.ModelAdmin):
         'hr_status_badge',
         'category',
         'subdivision',
+        'direction',
         'fio_parent',
         'created_by_display',
         'updated_by_display',
@@ -189,6 +215,75 @@ class StudentAdmin(admin.ModelAdmin):
                         if pd.isna(dt):
                             raise ValueError(f"Неверная дата: {val!r}. Ожидаю формат вроде 12.12.2000")
                         return dt.date()
+
+                    def parse_fired_date_with_precision(val):
+                        """
+                        Parse fired date cell value and determine precision:
+                        - day: 04.05.2025 (or any excel date)
+                        - month: 'Март 2025' / '2025-03' / '03.2025' (no explicit day)
+                        Returns: (date|None, precision|None)
+                        """
+                        if val is None or pd.isna(val):
+                            return None, None
+
+                        # excel gives timestamps for real dates
+                        if isinstance(val, pd.Timestamp):
+                            return val.date(), 'day'
+
+                        try:
+                            from datetime import datetime, date
+                            if isinstance(val, datetime):
+                                return val.date(), 'day'
+                            if isinstance(val, date):
+                                return val, 'day'
+                        except Exception:
+                            pass
+
+                        # numeric excel serial => day precision
+                        if isinstance(val, (int, float)) and not isinstance(val, bool):
+                            d = parse_excel_date(val)
+                            return d, 'day' if d else (None, None)
+
+                        s = str(val).strip()
+                        if not s:
+                            return None, None
+
+                        s_norm = s.lower().replace('ё', 'е')
+                        s_norm = ' '.join(s_norm.split())
+
+                        # year present?
+                        import re
+                        year_m = re.search(r'(\d{4})', s_norm)
+                        if not year_m:
+                            d = parse_excel_date(val)
+                            return d, 'day' if d else (None, None)
+                        year = int(year_m.group(1))
+
+                        # detect month word
+                        month_num = None
+                        for month_name, month_idx in month_map.items():
+                            if month_name in s_norm:
+                                month_num = month_idx
+                                break
+
+                        # YYYY-MM or YYYY.MM or YYYY/MM
+                        m_ym = re.match(r'^\s*(\d{4})[./-](\d{1,2})\s*$', s_norm)
+                        if m_ym:
+                            m = int(m_ym.group(2))
+                            if 1 <= m <= 12:
+                                return datetime(year, m, 1).date(), 'month'
+
+                        if month_num:
+                            # if the string doesn't explicitly contain a day, treat as month-only
+                            # (month-only input like "Март 2025")
+                            if re.match(r'^\s*\d{1,2}\s*[.,/-]?\s*\d{1,2}\s*[.,/-]?\s*\d{4}\s*$', s_norm):
+                                d = parse_excel_date(val)
+                                return d, 'day' if d else (None, None)
+                            return datetime(year, month_num, 1).date(), 'month'
+
+                        # fallback: treat as exact date
+                        d = parse_excel_date(val)
+                        return d, 'day' if d else (None, None)
 
                     # Маппинги с нормализацией
                     # Жёлтый, Желтый, желтый, жёлтый
@@ -310,47 +405,6 @@ class StudentAdmin(admin.ModelAdmin):
                                     except (InvalidOperation, ValueError):
                                         errors.append(f"Строка {idx + 2}: Неверное значение {col_name}: {val}")
 
-                            # Проверка на дубликат телефона (только если указан)
-                            # NOTE: если мы обновляем уже существующего кота, разрешаем тот же номер
-                            phone = data.get('phone_personal')
-                            # student переменная может быть определена ниже when updating
-
-                            # Сначала попытаемся найти уже существующего студента по имени и категории
-                            qs = Student.objects.filter(
-                                first_name__iexact=first_name,
-                                last_name__iexact=last_name,
-                                category=data.get('category'),
-                            )
-                            if patronymic:
-                                qs = qs.filter(patronymic__iexact=patronymic)
-                            student = qs.first()
-
-                            if student:
-                                # если номер указан и принадлежит другому студенту – ошибка
-                                if phone:
-                                    conflict = Student.objects.filter(phone_personal=phone).exclude(pk=student.pk)
-                                    if conflict.exists():
-                                        raise ValueError(f"Телефон {phone} уже используется")
-                                # Обновляем поля существующего студента
-                                for k, v in data.items():
-                                    # не перезаписываем created_by при апдейте
-                                    if k == 'created_by':
-                                        continue
-                                    setattr(student, k, v)
-                                student.updated_by = request.user
-                                student.save()
-                                updated += 1
-                            else:
-                                # никакого существующего кота не найдено – создаём нового
-                                if phone and Student.objects.filter(phone_personal=phone).exists():
-                                    raise ValueError(f"Телефон {phone} уже используется")
-                                data['status'] = 'active'  # default на создание
-                                student = Student.objects.create(**data)
-                                # Устанавливаем флаг чтобы не создавать История для импортированного студента
-                                student._is_import = True
-                                student.save()
-                                created += 1
-
                             # Календарь (только заполненные)
                             month_data = {}
                             for col in df.columns:
@@ -369,7 +423,7 @@ class StudentAdmin(admin.ModelAdmin):
                                                 if level_display:
                                                     level = level_map.get(normalize_key(level_display))
                                                     if level is not None:  # Может быть level='' (Без уровня)
-                                                        month_data[(year, month)] = {'level': level, 'fired_date': None}
+                                                        month_data[(year, month)] = {'level': level, 'fired_date': None, 'fired_date_precision': None}
 
                             for col in df.columns:
                                 col_str = str(col).strip()
@@ -378,18 +432,70 @@ class StudentAdmin(admin.ModelAdmin):
                                     parts = header.split()
                                     if len(parts) == 2:
                                         month_name, year_str = parts
-                                        if month_name in month_map and year_str.isdigit():
+                                        month_name_normalized = normalize_key(month_name)
+                                        if month_name_normalized in month_map and year_str.isdigit():
                                             year = int(year_str)
-                                            month = month_map[month_name]
+                                            month = month_map[month_name_normalized]
                                             key = (year, month)
                                             if key in month_data and month_data[key]['level'] == 'fired':
                                                 date_val = row.get(col)
                                                 if pd.notna(date_val) and safe_str(date_val):
                                                     try:
-                                                        fired_date = pd.to_datetime(date_val).date()
+                                                        fired_date, fired_precision = parse_fired_date_with_precision(date_val)
                                                         month_data[key]['fired_date'] = fired_date
+                                                        month_data[key]['fired_date_precision'] = fired_precision
                                                     except Exception as e:
                                                         errors.append(f"Строка {idx + 2}: Неверная дата в {col}: {e}")
+
+                            # Определяем текущий уровень/статус/дату увольнения
+                            now = timezone.now()
+                            current_key = (now.year, now.month)
+
+                            # 1) уровень: из колонки "Текущий уровень" если есть, иначе из календаря за текущий месяц
+                            current_level_raw = safe_str(row.get('Текущий уровень'))
+                            current_level = None
+                            if current_level_raw:
+                                current_level = level_map.get(normalize_key(current_level_raw))
+                            if current_level is None:
+                                current_level = month_data.get(current_key, {}).get('level')
+
+                            if current_level is not None:
+                                data['level'] = current_level
+
+                            # 2) статус: если уровень уволен -> fired, иначе active
+                            # (если в файле есть колонка "Статус" — она может быть человекочитаемой, но
+                            # на импорт мы всё равно нормализуем по уровню, чтобы не было рассинхрона)
+                            if data.get('level') == 'fired':
+                                data['status'] = 'fired'
+                            else:
+                                data['status'] = 'active'
+
+                            # 3) дата увольнения: при уровне "уволен" берём за текущий месяц, иначе последнюю из month_data
+                            fired_items = [
+                                v.get('fired_date')
+                                for k, v in month_data.items()
+                                if v.get('level') == 'fired' and v.get('fired_date')
+                            ]
+                            fired_date_current = month_data.get(current_key, {}).get('fired_date')
+
+                            if data.get('level') == 'fired':
+                                if fired_date_current:
+                                    data['fired_date'] = fired_date_current
+                                elif fired_items:
+                                    d_max = max(fired_items)
+                                    data['fired_date'] = d_max
+                                else:
+                                    data['fired_date'] = None
+                            else:
+                                data['fired_date'] = None
+
+                            # Всегда создаём нового кота без каких‑либо проверок уникальности
+                            # (телефон, ФИО, категория и т.п. могут повторяться)
+                            student = Student.objects.create(**data)
+                            # Устанавливаем флаг, чтобы не создавать историю уровней для импортированного студента
+                            student._is_import = True
+                            student.save()
+                            created += 1
 
                             months_imported = len(month_data)
                             for (year, month), vals in month_data.items():
@@ -450,9 +556,10 @@ class StudentAdmin(admin.ModelAdmin):
             calendar_headers = [f"{m} {y}" for y in range(2023, 2027) for m in months_ru]
 
             base_headers = [
-                "ФИО", "Имя", "Фамилия", "Отчество", "Возраст", "Текущий уровень", "Текущая дата увольнения",
+                "№",
+                "ФИО", "Имя", "Фамилия", "Отчество", "Возраст", "Текущий уровень", "Дата увольнения",
                 "Статус", "Категория", "Направление", "Подразделение", "Личный телефон", "Telegram",
-                "Телефон родителя", "ФИО родителя", "Адрес фактический", "Адрес по прописке", "Медицинские данные",
+                "Телефон родителя", "ФИО родителя", "Адрес фактический", "Адрес по прописке",
                 "Создан", "Кем создан", "Изменён"
             ]
             headers = base_headers + calendar_headers
@@ -471,16 +578,24 @@ class StudentAdmin(admin.ModelAdmin):
                 students_in_cat = [s for s in queryset if s.category == cat]
                 students_in_cat.sort(key=lambda s: s.full_name)
                 if students_in_cat:
-                    data.append([f"=== КАТЕГОРИЯ: {category_names.get(cat, cat.upper())} ==="] + [""] * (len(headers) - 1))
+                    data.append([category_names.get(cat, cat.upper())] + [""] * (len(headers) - 1))
+                    counter = 1
+                    # последний календарный месяц (для колонки "Дата увольнения")
+                    first_this_month = timezone.now().date().replace(day=1)
+                    prev_month_end = first_this_month - timezone.timedelta(days=1)
+                    prev_month_start = prev_month_end.replace(day=1)
                     for student in students_in_cat:
                         row = [
+                            counter,
                             student.full_name,
                             student.first_name,
                             student.last_name,
                             student.patronymic or "—",
                             student.age or "—",
                             student.get_level_display(),
-                            student.fired_date.strftime('%d.%m.%Y') if student.fired_date else "—",
+                            format_fired_date_for_admin(student.fired_date)
+                            if student.fired_date and prev_month_start <= student.fired_date <= prev_month_end
+                            else "—",
                             student.get_status_display(),
                             student.get_category_display(),
                             student.direction or "—",
@@ -491,7 +606,6 @@ class StudentAdmin(admin.ModelAdmin):
                             student.fio_parent,
                             student.address_actual or "—",
                             student.address_registered or "—",
-                            student.medical_info or "—",
                             student.created_at.strftime("%d.%m.%Y %H:%M"),
                             student.created_by.get_full_name() if student.created_by else "—",
                             student.updated_at.strftime("%d.%m.%Y %H:%M"),
@@ -503,11 +617,12 @@ class StudentAdmin(admin.ModelAdmin):
                                 if lbm and lbm.level:
                                     display = lbm.get_level_display()
                                     if lbm.level == 'fired' and lbm.fired_date:
-                                        display += f" ({lbm.fired_date.strftime('%d.%m.%Y')})"
+                                        display += f" ({format_fired_date_for_admin(lbm.fired_date)})"
                                     row.append(display)
                                 else:
                                     row.append("—")
                         data.append(row)
+                        counter += 1
             df = pd.DataFrame(data, columns=headers)
             response = HttpResponse(content_type="text/csv; charset=utf-8")
             response['Content-Disposition'] = f'attachment; filename="export_data_{timezone.now():%Y%m%d_%H%M%S}.csv"'
@@ -547,6 +662,27 @@ class StudentAdmin(admin.ModelAdmin):
 
         super().save_model(request, obj, form, change)
 
+    # Полный доступ в админке для роли hr_tev
+    def has_view_permission(self, request, obj=None):
+        if getattr(request.user, "role", None) == "hr_tev":
+            return True
+        return super().has_view_permission(request, obj)
+
+    def has_change_permission(self, request, obj=None):
+        if getattr(request.user, "role", None) == "hr_tev":
+            return True
+        return super().has_change_permission(request, obj)
+
+    def has_delete_permission(self, request, obj=None):
+        if getattr(request.user, "role", None) == "hr_tev":
+            return True
+        return super().has_delete_permission(request, obj)
+
+    def has_add_permission(self, request):
+        if getattr(request.user, "role", None) == "hr_tev":
+            return True
+        return super().has_add_permission(request)
+
     
     def level_calendar_preview(self, obj):
         if not obj.pk:
@@ -576,7 +712,7 @@ class StudentAdmin(admin.ModelAdmin):
                 if lbm and lbm.level is not None:  # level может быть '' (Без уровня)
                     display = lbm.get_level_display()
                     if lbm.level == 'fired' and lbm.fired_date:
-                        display += f"<br><small>({lbm.fired_date.strftime('%d.%m.%Y')})</small>"
+                        display += f"<br><small>({format_fired_date_for_admin(lbm.fired_date)})</small>"
                     changes = f"<br><small>({lbm.change_count} изм.)</small>" if lbm.change_count > 1 else ""
                     # Специальный цвет для "Без уровня" (серый фон)
                     cell_bg = 'background: #e5e7eb;' if lbm.level == '' else ''
@@ -599,9 +735,7 @@ class StudentAdmin(admin.ModelAdmin):
 
     
     def fired_date_preview(self, obj):
-        if obj.fired_date:
-            return obj.fired_date.strftime('%d.%m.%Y')
-        return "—"
+        return format_fired_date_for_admin(obj.fired_date)
     fired_date_preview.short_description = "Дата увольнения"
 
     def calculated_age(self, obj):
@@ -647,7 +781,7 @@ class StudentAdmin(admin.ModelAdmin):
         color = colors.get(obj.level, 'bg-secondary text-white')
         display = obj.get_level_display()
         if obj.level == 'fired' and obj.fired_date:
-            display += f" ({obj.fired_date.strftime('%d.%m.%Y')})"
+            display += f" ({format_fired_date_for_admin(obj.fired_date)})"
         return format_html('<span class="badge {}">{}</span>', color, display)
     level_badge.short_description = "Уровень"
 
@@ -684,7 +818,7 @@ class LevelByMonthAdmin(admin.ModelAdmin):
         if obj.level:
             display = obj.get_level_display()
             if obj.level == 'fired' and obj.fired_date:
-                display += f" ({obj.fired_date.strftime('%d.%m.%Y')})"
+                display += f" ({format_fired_date_for_admin(obj.fired_date)})"
             return display
         return "—"
     level_display.short_description = "Уровень"

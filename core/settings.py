@@ -7,6 +7,10 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-default-key')
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 ALLOWED_HOSTS = ['*']
 
+# Security: allow customizing Django admin URL (security by obscurity + reduces scanning).
+# Example: ADMIN_URL="secret-admin/" (must end with a slash).
+ADMIN_URL = os.getenv('ADMIN_URL', 'admin/').lstrip('/')
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',

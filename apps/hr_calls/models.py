@@ -8,8 +8,16 @@ from utils.validators import validate_datetime_not_future
 User = get_user_model()
 
 PERSON_TYPE_CHOICES = [
-    ('student', 'Кот (студент)'),
-    ('college', 'Колледжист (не кот)'),
+    ('cat', 'Кот'),
+    ('not_cat', 'Не кот'),
+]
+
+HR_CALL_CATEGORY_CHOICES = [
+    ('college', 'Колледжисты'),
+    ('alabuga_start_sng', 'АС(СНГ)'),
+    ('alabuga_start_rf', 'АС(РФ)'),
+    ('alabuga_mulatki', 'АС(МИР)'),
+    ('patriot', 'Патриоты'),
 ]
 
 class HrCall(models.Model):
@@ -25,7 +33,14 @@ class HrCall(models.Model):
         null=True,
         blank=True,
         related_name="hr_calls",
-        verbose_name="Кот (если студент)"
+        verbose_name="Кот (если есть в базе)"
+    )
+    category = models.CharField(
+        "Категория",
+        max_length=50,
+        blank=True,
+        choices=HR_CALL_CATEGORY_CHOICES,
+        help_text="Категория кота (выбирается автоматически по коту)"
     )
     full_name = models.CharField(
         "ФИО",
@@ -70,7 +85,7 @@ class HrCall(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        name = self.full_name if self.person_type == 'college' else (self.student.full_name if self.student else 'Неизвестно')
+        name = self.full_name if self.person_type == 'not_cat' else (self.student.full_name if self.student else self.full_name or 'Неизвестно')
         return f"Вызов {name} к HR ({self.reason[:50]}...)"
 
     def clean(self):
@@ -78,19 +93,19 @@ class HrCall(models.Model):
         errors = {}
         
         # Валидация типа лица
-        if self.person_type not in ['student', 'college']:
-            errors['person_type'] = "Тип лица должен быть 'student' или 'college'"
+        if self.person_type not in ['cat', 'not_cat']:
+            errors['person_type'] = "Тип должен быть 'cat' или 'not_cat'"
         
-        # Валидация для типа 'student'
-        if self.person_type == 'student' and not self.student:
-            errors['student'] = "Для типа 'student' необходимо указать студента"
+        # Валидация для типа 'cat'
+        if self.person_type == 'cat' and not self.student and not (self.full_name and self.full_name.strip()):
+            errors['student'] = "Для типа 'cat' укажите кота из базы (student) или заполните ФИО"
         
-        # Валидация для типа 'college'
-        if self.person_type == 'college' and not self.full_name:
-            errors['full_name'] = "Для типа 'college' необходимо указать ФИО"
+        # Валидация для типа 'not_cat'
+        if self.person_type == 'not_cat' and not (self.full_name and self.full_name.strip()):
+            errors['full_name'] = "Для типа 'not_cat' необходимо указать ФИО"
         
-        # Валидация ФИО для колледжистов
-        if self.person_type == 'college' and self.full_name:
+        # Валидация ФИО для ручного ввода
+        if self.person_type in ('cat', 'not_cat') and self.full_name:
             if len(str(self.full_name).strip()) < 5:
                 errors['full_name'] = "ФИО должно содержать минимум 5 символов"
             if len(str(self.full_name)) > 200:
@@ -114,8 +129,14 @@ class HrCall(models.Model):
             raise ValidationError(errors)
 
     def save(self, *args, **kwargs):
-        if self.person_type == 'student' and self.student:
-            self.full_name = self.student.full_name
+        if self.person_type == 'cat':
+            if self.student:
+                self.full_name = self.student.full_name
+                # хранится ключ категории (чтобы это было выпадающим списком)
+                self.category = self.student.category
+        if self.person_type == 'not_cat':
+            # для "не кот" категорию не храним
+            self.category = ''
 
         super().save(*args, **kwargs)
 

@@ -36,26 +36,26 @@ def validate_phone_number(phone):
     # Убираем пробелы, тире, скобки и другие символы
     phone_clean = ''.join(filter(str.isdigit, str(phone)))
     
-    # Проверяем, есть ли иные символы в оригинальной строке
-    if len(phone_clean) != len(str(phone).strip()):
-        # Может быть использованы дефисы или пробелы - это допустимо
-        only_digits_and_allowed = all(c.isdigit() or c in (' ', '-', '(', ')') for c in str(phone))
-        if not only_digits_and_allowed:
-            raise PhoneInvalidFormatException(
-                "Номер телефона должен содержать только цифры, пробелы, дефисы и скобки"
-            )
+    # Проверяем, что строка содержит только допустимые символы.
+    # Разрешаем стандартные форматы вроде "+7 (999) 111-22-33".
+    s = str(phone).strip()
+    allowed_chars = set("0123456789 -()+")
+    if any(c not in allowed_chars for c in s):
+        raise ValidationError("Номер телефона содержит недопустимые символы")
+
+    # Разрешаем "+" только один раз и только в начале
+    if "+" in s and not s.startswith("+"):
+        raise ValidationError("Символ '+' допустим только в начале номера")
+    if s.count("+") > 1:
+        raise ValidationError("В номере телефона может быть только один символ '+'")
     
     # Проверяем длину (только цифры)
     if len(phone_clean) > 11:
-        raise PhoneTooLongException(
-            f"Номер телефона не должен превышать 11 цифр (введено: {len(phone_clean)})"
-        )
+        raise ValidationError(f"Номер телефона не должен превышать 11 цифр (введено: {len(phone_clean)})")
     
     # Должно быть хотя бы несколько цифр
     if len(phone_clean) < 7:
-        raise InvalidPhoneException(
-            "Номер телефона должен содержать минимум 7 цифр"
-        )
+        raise ValidationError("Номер телефона должен содержать минимум 7 цифр")
 
 
 def validate_phone_digits_only(phone):
@@ -66,14 +66,10 @@ def validate_phone_digits_only(phone):
         return
     
     if not str(phone).isdigit():
-        raise PhoneInvalidFormatException(
-            "Номер телефона должен содержать только цифры"
-        )
+        raise ValidationError("Номер телефона должен содержать только цифры")
     
     if len(str(phone)) > 11:
-        raise PhoneTooLongException(
-            f"Номер телефона не должен превышать 11 цифр (введено: {len(str(phone))})"
-        )
+        raise ValidationError(f"Номер телефона не должен превышать 11 цифр (введено: {len(str(phone))})")
 
 
 # ============================================================================
