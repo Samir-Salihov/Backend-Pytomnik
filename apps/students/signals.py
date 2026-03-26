@@ -184,11 +184,11 @@ def sync_kanban_card_and_hr_call(sender, instance, created, **kwargs):
     if called_changed:
         if not HrCall.objects.filter(
             student=instance,
-            person_type='student',
+            person_type='cat',
             problem_resolved=False
         ).exists():
             HrCall.objects.create(
-                person_type='student',
+                person_type='cat',
                 student=instance,
                 reason="Вызван к HR (изменение флага)",
                 created_by=instance.updated_by or instance.created_by

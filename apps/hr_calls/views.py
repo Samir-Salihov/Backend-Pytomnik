@@ -223,7 +223,6 @@ class HrFileDeleteView(APIView):
 
 
 class HrCallExportExcelView(APIView):
-    authentication_classes = [SessionAuthentication]
     permission_classes = [HRTEVOrAdminPermission]
 
     def get(self, request):
