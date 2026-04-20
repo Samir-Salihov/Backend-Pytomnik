@@ -48,6 +48,7 @@ class StudentSerializer(serializers.ModelSerializer):
     direction_display = serializers.CharField(source='get_direction_display', read_only=True)
     subdivision_display = serializers.CharField(source='get_subdivision_display', read_only=True)
     kvazar_rank_display = serializers.CharField(source='get_kvazar_rank_display', read_only=True)
+    course_display = serializers.CharField(source='get_course_display', read_only=True)
 
     created_by_username = serializers.SerializerMethodField()
     updated_by_username = serializers.SerializerMethodField()
@@ -61,7 +62,7 @@ class StudentSerializer(serializers.ModelSerializer):
             'id', 'first_name', 'last_name', 'patronymic', 'full_name',
             'direction', 'direction_display', 'subdivision', 'subdivision_display', 'age',
             'level', 'level_display',
-            'status', 'status_display', 'category', 'category_display',
+            'status', 'status_display', 'category', 'category_display', 'course', 'course_display',
             'address_actual', 'address_registered', 'phone_personal', 'telegram',
             'phone_parent', 'medical_info', 'created_at', 'updated_at',
             'created_by', 'created_by_username', 'updated_by', 'updated_by_username',
@@ -112,7 +113,7 @@ class StudentCreateSerializer(serializers.ModelSerializer):
         model = Student
         fields = [
             'first_name', 'last_name', 'patronymic', 'direction', 'subdivision',
-            'birth_date', 'photo', 'level', 'status', 'category', 'kvazar_rank',
+            'birth_date', 'photo', 'level', 'status', 'category', 'course', 'kvazar_rank',
             'address_actual', 'address_registered', 'phone_personal', 'telegram',
             'phone_parent', 'fio_parent', 'medical_info', 'is_called_to_hr'
         ]
@@ -266,7 +267,7 @@ class StudentUpdateSerializer(serializers.ModelSerializer):
         model = Student
         fields = [
             'first_name', 'last_name', 'patronymic', 'direction', 'subdivision',
-            'age', 'level', 'status', 'category', 'address_actual', 'address_registered',
+            'age', 'level', 'status', 'category', 'course', 'address_actual', 'address_registered',
             'phone_personal', 'telegram', 'phone_parent', 'medical_info', 'is_called_to_hr',
             'fired_date', 'photo',   # ← добавлено: теперь дата увольнения редактируемая через API
         ]
@@ -569,6 +570,7 @@ class StudentDetailSerializer(serializers.ModelSerializer):
     level_display = serializers.CharField(source='get_level_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     category_display = serializers.CharField(source='get_category_display', read_only=True)
+    course_display = serializers.CharField(source='get_course_display', read_only=True)
     direction_display = serializers.CharField(source='get_direction_display', read_only=True)
     subdivision_display = serializers.CharField(source='get_subdivision_display', read_only=True)
     kvazar_rank_display = serializers.CharField(source='get_kvazar_rank_display', read_only=True)
@@ -589,7 +591,7 @@ class StudentDetailSerializer(serializers.ModelSerializer):
             'id', 'first_name', 'last_name', 'patronymic', 'full_name',
             'direction', 'direction_display', 'subdivision', 'subdivision_display', 'birth_date', 'age',
             'level', 'level_display', 'status', 'status_display',
-            'category', 'category_display', 'is_called_to_hr',
+            'category', 'category_display', 'course', 'course_display', 'is_called_to_hr',
             'address_actual', 'address_registered',
             'phone_personal', 'telegram', 'phone_parent', 'fio_parent',
             'medical_info', 'photo', 'photo_url', 'medical_files',

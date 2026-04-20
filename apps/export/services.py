@@ -25,7 +25,7 @@ def generate_excel_stream():
     base_headers = [
         "№",
         "ФИО", "Имя", "Фамилия", "Отчество", "Возраст", "Текущий уровень", "Дата увольнения",
-        "Статус", "Категория", "Направление", "Подразделение", "Личный телефон", "Telegram",
+        "Статус", "Категория", "Курс", "Направление", "Подразделение", "Личный телефон", "Telegram",
         "Телефон родителя", "ФИО родителя", "Адрес фактический", "Адрес по прописке",
         "Создан", "Кем создан", "Изменён"
     ]
@@ -134,10 +134,8 @@ def generate_excel_stream():
             # Студенты
             counter = 1
             for student in students_in_cat:
-                # дата увольнения за последний месяц по основному полю fired_date
-                fired_last_month = None
-                if student.fired_date and prev_month_start <= student.fired_date <= prev_month_end:
-                    fired_last_month = student.fired_date
+                # Всегда выводим актуальную дату увольнения из основного поля студента
+                fired_date = student.fired_date
 
                 # prepare raw values and track level keys for coloring
                 base_values = [
@@ -148,9 +146,10 @@ def generate_excel_stream():
                     student.patronymic or "—",
                     student.age or "—",
                     student.get_level_display(),
-                    format_fired_date(fired_last_month) if fired_last_month else "—",
+                    format_fired_date(fired_date) if fired_date else "—",
                     student.get_status_display(),
                     student.get_category_display(),
+                    student.get_course_display() or "—",
                     student.get_direction_display() or student.direction or "—",
                     student.get_subdivision_display() or student.subdivision or "—",
                     student.phone_personal,

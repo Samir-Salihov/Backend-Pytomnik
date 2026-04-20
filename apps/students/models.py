@@ -31,6 +31,14 @@ STATUS_CHOICES = [
     ('fired', 'Уволенные'),
 ]
 
+COURSE_CHOICES = [
+    ('1', '1 курс'),
+    ('2', '2 курс'),
+    ('3', '3 курс'),
+    ('4', '4 курс'),
+    ('graduate', 'Выпускник'),
+]
+
 CATEGORY_CHOICES = [
     ('college', 'Колледжисты'),
     ('patriot', 'Патриоты'),
@@ -96,6 +104,7 @@ class Student(models.Model):
     level = models.CharField("Уровень доступа", max_length=10, choices=LEVEL_CHOICES, default='', blank=True)
     status = models.CharField("Статус", max_length=20, choices=STATUS_CHOICES, default='active')
     category = models.CharField("Категория", max_length=30, choices=CATEGORY_CHOICES)
+    course = models.CharField("Курс", max_length=10, choices=COURSE_CHOICES, blank=True, null=True)
 
     address_actual = models.TextField("Фактический адрес проживания", blank=True, null=True)
     address_registered = models.TextField("Адрес по прописке", blank=True, null=True)
@@ -137,6 +146,12 @@ class Student(models.Model):
     )
 
     objects = StudentManager()
+    
+    def clean(self):
+        # Очищаем поле курс если категория не Колледжист
+        if self.category != 'college':
+            self.course = None
+        super().clean()
 
     class Meta:
         verbose_name = "Кот"
@@ -220,6 +235,10 @@ class Student(models.Model):
             self.status = 'fired'
         else:
             self.status = 'active'
+        
+        # Если категория не Колледжист - удаляем курс
+        if self.category != 'college':
+            self.course = None
 
         super().save(*args, **kwargs)
 

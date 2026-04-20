@@ -54,6 +54,13 @@ class HrCallAdmin(admin.ModelAdmin):
         if not obj.created_by:
             obj.created_by = request.user
         super().save_model(request, obj, form, change)
+        
+        # Исправление: напрямую сбрасываем флаг is_called_to_hr сразу после сохранения
+        if obj.problem_resolved:
+            if obj.person_type == 'student' and obj.student:
+                if obj.student.is_called_to_hr:
+                    obj.student.is_called_to_hr = False
+                    obj.student.save(update_fields=['is_called_to_hr'])
 
     # Полный доступ для hr_tev в админке
     def has_view_permission(self, request, obj=None):

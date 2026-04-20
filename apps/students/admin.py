@@ -7,7 +7,7 @@ from django.utils.html import format_html, mark_safe
 from django.http import HttpResponse
 from django.utils import timezone
 from io import BytesIO
-from .models import Student, LevelHistory, Comment, MedicalFile, LevelByMonth, ViolationAct, CATEGORY_CHOICES
+from .models import Student, LevelHistory, Comment, MedicalFile, LevelByMonth, ViolationAct, CATEGORY_CHOICES, COURSE_CHOICES
 from .forms import PartialDateField
 import pandas as pd
 from django.urls import reverse
@@ -95,6 +95,7 @@ class StudentAdmin(admin.ModelAdmin):
         'status_badge',
         'hr_status_badge',
         'category',
+        'course',
         'subdivision',
         'direction',
         'fio_parent',
@@ -104,7 +105,7 @@ class StudentAdmin(admin.ModelAdmin):
         'updated_at',
         'fired_date_preview',
     )
-    list_filter = ('level', 'status', 'is_called_to_hr', 'category', 'subdivision', 'created_by', 'updated_by', 'fired_date')
+    list_filter = ('level', 'status', 'is_called_to_hr', 'category', 'course', 'subdivision', 'created_by', 'updated_by', 'fired_date')
     search_fields = ('last_name', 'first_name', 'patronymic', 'phone_personal', 'telegram', 'fio_parent')
     ordering = ('-updated_at',)
     readonly_fields = (
@@ -117,7 +118,7 @@ class StudentAdmin(admin.ModelAdmin):
             'fields': ('first_name', 'last_name', 'patronymic', 'birth_date', 'calculated_age', 'photo', 'photo_preview')
         }),
         ('Образование и работа', {'fields': ('direction', 'subdivision')}),
-        ('Статус и уровень', {'fields': ('level', 'status', 'is_called_to_hr', 'category', 'fired_date')}),
+        ('Статус и уровень', {'fields': ('level', 'status', 'is_called_to_hr', 'category', 'course', 'fired_date')}),
         ('Адреса', {'fields': ('address_actual', 'address_registered')}),
         ('Контакты', {'fields': ('phone_personal', 'telegram', 'phone_parent', 'fio_parent')}),
         ('Медицинские данные', {'fields': ('medical_info',)}),
@@ -374,6 +375,17 @@ class StudentAdmin(admin.ModelAdmin):
 
                             # Новые поля
                             data['olympiads_participation'] = safe_str(row.get('Участие в олимпиадах')) or None
+                            
+                            # Импорт поля Курс
+                            course_raw = safe_str(row.get('Курс'))
+                            if course_raw:
+                                from .models import COURSE_CHOICES
+                                data['course'] = student_utils.map_choice_value(
+                                    course_raw,
+                                    COURSE_CHOICES
+                                )
+                            else:
+                                data['course'] = None
 
                             # convert Квазар rank either from key or from display label
                             kvazar = safe_str(row.get('Участие в Квазаре'))
@@ -489,13 +501,24 @@ class StudentAdmin(admin.ModelAdmin):
                             else:
                                 data['fired_date'] = None
 
-                            # Всегда создаём нового кота без каких‑либо проверок уникальности
-                            # (телефон, ФИО, категория и т.п. могут повторяться)
-                            student = Student.objects.create(**data)
+                            # Проверяем существует ли кот с таким ФИО
+                            student, created_student = Student.objects.get_or_create(
+                                first_name=first_name,
+                                last_name=last_name,
+                                defaults=data
+                            )
+                            
+                            if not created_student:
+                                # Обновляем существующего кота новыми данными
+                                for key, value in data.items():
+                                    setattr(student, key, value)
+                                updated += 1
+                            else:
+                                created += 1
+                            
                             # Устанавливаем флаг, чтобы не создавать историю уровней для импортированного студента
                             student._is_import = True
                             student.save()
-                            created += 1
 
                             months_imported = len(month_data)
                             for (year, month), vals in month_data.items():

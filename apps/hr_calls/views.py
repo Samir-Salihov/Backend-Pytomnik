@@ -23,6 +23,16 @@ class HrCallListView(APIView):
 
     def get(self, request):
         calls = HrCall.objects.all().order_by('-created_at')
+        
+        # Фильтрация по пользователю создателю
+        created_by = request.query_params.get('created_by')
+        if created_by:
+            # Поддерживаем как id так и username/login
+            if created_by.isdigit():
+                calls = calls.filter(created_by_id=created_by)
+            else:
+                calls = calls.filter(created_by__username=created_by)
+            
         serializer = HrCallSerializer(calls, many=True)
         return Response({
             "success": True,

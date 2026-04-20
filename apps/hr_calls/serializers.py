@@ -37,11 +37,12 @@ class HrCallSerializer(serializers.ModelSerializer):
     comments = HrCommentSerializer(many=True, read_only=True)
     files = HrFileSerializer(many=True, read_only=True)
     created_by_username = serializers.CharField(source='created_by.username', read_only=True)
+    person_type_display = serializers.SerializerMethodField()
 
     class Meta:
         model = HrCall
         fields = [
-            'id', 'person_type', 'category', 'student', 'full_name', 'reason', 'solution',
+            'id', 'person_type', 'person_type_display', 'category', 'student', 'full_name', 'reason', 'solution',
             'visit_datetime', 'created_by_username', 'created_at', 'updated_at',
             'comments', 'files', 'problem_resolved'
         ]
@@ -51,6 +52,9 @@ class HrCallSerializer(serializers.ModelSerializer):
         if obj.person_type == 'cat' and obj.student:
             return obj.student.full_name
         return obj.full_name
+    
+    def get_person_type_display(self, obj):
+        return obj.get_person_type_display()
 
 
 class HrCallCreateSerializer(serializers.ModelSerializer):

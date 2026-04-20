@@ -22,7 +22,7 @@ from apps.kanban.views import KanbanBoardDetailView, MoveCardView, KanbanBoardCr
 
 from apps.export.views import ExportStudentsExcelView
 
-from apps.analytics.views import AnalyticsDashboardView, LevelDistributionView, AnalyticsDownloadView, analytics_download_view
+from apps.analytics.views import AnalyticsDashboardView, AnalyticsDashboardAPView, AnalyticsDashboardASPatriotsView, LevelDistributionView, LevelDistributionAPView, LevelDistributionASPatriotsView, AnalyticsDownloadView, analytics_download_view, AnalyticsMetricsStudentsView
 
 
 from apps.students.views import ViolationActListView, ViolationActUploadView, ViolationActDeleteView
@@ -59,9 +59,16 @@ urlpatterns = [
     path('export/', ExportStudentsExcelView.as_view(), name='export'),
     
     path('dashboard/', AnalyticsDashboardView.as_view(), name='analytics-dashboard'),
+    path('dashboard/ap/', AnalyticsDashboardAPView.as_view(), name='analytics-dashboard-ap'),
+    path('dashboard/as-patriots/', AnalyticsDashboardASPatriotsView.as_view(), name='analytics-dashboard-as-patriots'),
     path('levels/', LevelDistributionView.as_view(), name='level-distribution'),
+    path('levels/ap/', LevelDistributionAPView.as_view(), name='level-distribution-ap'),
+    path('levels/as-patriots/', LevelDistributionASPatriotsView.as_view(), name='level-distribution-as-patriots'),
     path('boards/create/', KanbanBoardCreateView.as_view(), name='kanban-board-create'),
     path('analytics/download/', AnalyticsDownloadView.as_view(), name='analytics-download-api'),
+    path('analytics/download/ap/', AnalyticsDownloadView.as_view(), {'category_filter': 'college'}, name='analytics-download-ap'),
+    path('analytics/download/as-patriots/', AnalyticsDownloadView.as_view(), {'category_filter': ['patriot', 'alabuga_start_rf', 'alabuga_start_sng', 'alabuga_mulatki']}, name='analytics-download-as-patriots'),
+    path('analytics/metrics/students/', AnalyticsMetricsStudentsView.as_view(), name='analytics-metrics-students'),
 
     path('hr-calls/', HrCallListView.as_view(), name='hr_call_list'),
     path('hr-calls/create/', HrCallCreateView.as_view(), name='hr_call_create'),

@@ -21,8 +21,20 @@ def cleanup_previous_status(sender, instance, **kwargs):
     if hasattr(instance, '_previous_status'):
         delattr(instance, '_previous_status')
 
+@receiver(pre_save, sender=HrCall)
+def track_hr_call_changes(sender, instance, **kwargs):
+    if instance.pk:
+        old_instance = HrCall.objects.only('problem_resolved').get(pk=instance.pk)
+        instance._old_problem_resolved = old_instance.problem_resolved
+    else:
+        instance._old_problem_resolved = False
+
 @receiver(post_save, sender=HrCall)
 def update_student_hr_status(sender, instance, **kwargs):
-    if instance.problem_resolved and instance.person_type == 'student' and instance.student:
-        instance.student.is_called_to_hr = False
-        instance.student.save(update_fields=['is_called_to_hr'])
+    # ВСЕГДА сбрасываем флаг если проблема отмечена как решена
+    # Работает при создании и при редактировании
+    if instance.problem_resolved:
+        if instance.person_type == 'student' and instance.student:
+            if instance.student.is_called_to_hr:
+                instance.student.is_called_to_hr = False
+                instance.student.save(update_fields=['is_called_to_hr'])
