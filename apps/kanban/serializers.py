@@ -15,11 +15,13 @@ class StudentCardSerializer(serializers.ModelSerializer):
     level = serializers.CharField(source='student.level')
     level_display = serializers.CharField(source='student.get_level_display')
     status = serializers.CharField(source='student.status')
+    course = serializers.CharField(source='student.course')
+    course_display = serializers.CharField(source='student.get_course_display')
     tags = serializers.SerializerMethodField()
 
     class Meta:
         model = StudentKanbanCard
-        fields = ['id', 'full_name', 'photo', 'age', 'level', 'level_display', 'status', 'tags']
+        fields = ['id', 'full_name', 'photo', 'age', 'level', 'level_display', 'status', 'course', 'course_display', 'tags']
 
     def get_tags(self, obj: StudentKanbanCard):
         tags = []

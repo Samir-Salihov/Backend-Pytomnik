@@ -32,6 +32,13 @@ class KanbanBoardDetailView(APIView):
             KanbanBoard.objects.prefetch_related('columns__cards__student'),
             id=board_id
         )
+        
+        # Фильтрация по курсу если указан параметр
+        course_filter = request.query_params.get('course')
+        if course_filter:
+            # Перебираем колонки и фильтруем карточки по курсу
+            for column in board.columns.all():
+                column.cards.set(column.cards.filter(student__course=course_filter))
 
         user = request.user
 
