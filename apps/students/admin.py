@@ -1,3 +1,4 @@
+import logging
 from django.contrib import admin
 from django import forms
 from django.shortcuts import render
@@ -170,6 +171,13 @@ class StudentAdmin(admin.ModelAdmin):
                     created = 0
                     updated = 0
                     errors = []
+                    duplicates = []
+                    import_logger = logging.getLogger('import')
+
+                    import_logger.info("=" * 80)
+                    import_logger.info(f"НАЧАЛО ИМПОРТА СТУДЕНТОВ")
+                    import_logger.info("=" * 80)
+                    import_logger.info(f"Всего строк в Excel: {len(df)}")
 
                     # Функция для нормализации строк (удаляет лишние пробелы и приводит к lowercase)
                     def normalize_key(s):
@@ -380,19 +388,40 @@ class StudentAdmin(admin.ModelAdmin):
                             course_raw = safe_str(row.get('Курс'))
                             if course_raw:
                                 from .models import COURSE_CHOICES
-                                data['course'] = student_utils.map_choice_value(
-                                    course_raw,
-                                    COURSE_CHOICES
-                                )
+                                # ✅ Исправление: корректно обрабатываем float числа из Excel (3.0 → 3)
+                                try:
+                                    # Сначала преобразуем во float, потом в int чтобы корректно обрабатывать 3.0, 2.0 и т.д.
+                                    course_num = int(float(course_raw))
+                                    course_str = str(course_num)
+                                    # Проверяем есть ли такое значение в ключах курсов (ключи - строки!)
+                                    course_keys = [k for k, v in COURSE_CHOICES]
+                                    if course_str in course_keys:
+                                        data['course'] = course_str
+                                    else:
+                                        # Если нет - пробуем через стандартный маппер
+                                        data['course'] = student_utils.map_choice_value(
+                                            course_raw,
+                                            COURSE_CHOICES
+                                        )
+                                except (ValueError, TypeError):
+                                    # Если не число - используем стандартный маппер
+                                    data['course'] = student_utils.map_choice_value(
+                                        course_raw,
+                                        COURSE_CHOICES
+                                    )
+                                
+                                # 🔍 Логирование для отладки
+                                import_logger.info(f"[IMPORT DEBUG] Курс: исходное='{course_raw}' → в базу={data.get('course')} | доступные варианты: {dict(COURSE_CHOICES)}")
                             else:
                                 data['course'] = None
 
                             # convert Квазар rank either from key or from display label
                             kvazar = safe_str(row.get('Участие в Квазаре'))
                             if kvazar:
+                                from .models import KVAZAR_RANK_CHOICES
                                 data['kvazar_rank'] = student_utils.map_choice_value(
                                     kvazar,
-                                    Student.KVAZAR_RANK_CHOICES
+                                    KVAZAR_RANK_CHOICES
                                 )
                             else:
                                 data['kvazar_rank'] = None
@@ -501,20 +530,35 @@ class StudentAdmin(admin.ModelAdmin):
                             else:
                                 data['fired_date'] = None
 
-                            # Проверяем существует ли кот с таким ФИО
-                            student, created_student = Student.objects.get_or_create(
-                                first_name=first_name,
-                                last_name=last_name,
-                                defaults=data
-                            )
+                            # Проверяем существует ли кот с таким ФИО + Отчество (если есть)
+                            lookup = {
+                                'first_name': first_name,
+                                'last_name': last_name,
+                            }
+                            if patronymic:
+                                lookup['patronymic'] = patronymic
                             
-                            if not created_student:
+                            existing_students = Student.objects.filter(**lookup)
+                            
+                            if existing_students.exists():
+                                student = existing_students.first()
+                                created_student = False
+                                duplicate_msg = f"⚠️ ДУБЛИКАТ: Строка {idx + 2}: Кот уже существует {student.full_name} ID={student.id}"
+                                duplicates.append(duplicate_msg)
+                                import_logger.warning(duplicate_msg)
+                                
                                 # Обновляем существующего кота новыми данными
                                 for key, value in data.items():
                                     setattr(student, key, value)
                                 updated += 1
+                                messages.info(request, f"✅ Обновлён: {student.full_name} (ID: {student.id})")
+                                import_logger.info(f"[IMPORT] Обновлён студент: {student.full_name} ID={student.id}")
                             else:
+                                student = Student.objects.create(**data)
+                                created_student = True
                                 created += 1
+                                messages.success(request, f"✅ Создан новый: {student.full_name} (ID: {student.id})")
+                                import_logger.info(f"[IMPORT] Создан новый студент: {student.full_name} ID={student.id}")
                             
                             # Устанавливаем флаг, чтобы не создавать историю уровней для импортированного студента
                             student._is_import = True
@@ -538,14 +582,48 @@ class StudentAdmin(admin.ModelAdmin):
                                 messages.info(request, f"Кот {student.full_name}: импортировано {months_imported} месяцев")
 
                         except Exception as e:
-                            errors.append(f"Строка {idx + 2}: {str(e)}")
+                            error_msg = f"❌ Строка {idx + 2} ({last_name} {first_name}): {str(e)}"
+                            errors.append(error_msg)
+                            import_logger.error(f"[IMPORT ERROR] {error_msg}")
+
+                    # Финальная статистика
+                    total_processed = idx + 1
+                    skipped = total_processed - created - updated - len(errors)
+                    
+                    import_logger.info("=" * 80)
+                    import_logger.info(f"ИТОГИ ИМПОРТА")
+                    import_logger.info("=" * 80)
+                    import_logger.info(f"✅ Всего строк в файле: {total_processed}")
+                    import_logger.info(f"✅ Создано новых: {created}")
+                    import_logger.info(f"✅ Обновлено существующих: {updated}")
+                    import_logger.info(f"⚠️ Пропущено дубликатов: {len(duplicates)}")
+                    import_logger.info(f"❌ Ошибок при импорте: {len(errors)}")
+                    import_logger.info(f"📊 Всего в базе теперь: {Student.objects.count()}")
+                    
+                    if duplicates:
+                        import_logger.warning("СПИСОК ДУБЛИКАТОВ:")
+                        for dup in duplicates:
+                            import_logger.warning(dup)
 
                     if errors:
-                        messages.warning(request, f"Создано {created} котов, обновлено {updated}. Ошибки в {len(errors)} строках.")
-                        for error in errors[:20]:
+                        import_logger.error("СПИСОК ОШИБОК:")
+                        for err in errors:
+                            import_logger.error(err)
+                    
+                    import_logger.info("=" * 80)
+                    import_logger.info("ИМПОРТ ЗАВЕРШЁН")
+                    import_logger.info("=" * 80)
+                    
+                    if errors:
+                        messages.warning(request, f"📊 Итог: всего {total_processed} строк | ✅ создано {created} | ✅ обновлено {updated} | ❌ ошибок {len(errors)} | ⚠️ пропущено дубликатов {skipped}")
+                        for error in errors[:30]:
                             messages.warning(request, error)
                     else:
-                        messages.success(request, f"Успешно создано {created} котов, обновлено {updated}.")
+                        messages.success(request, f"📊 Итог: всего {total_processed} строк | ✅ создано {created} | ✅ обновлено {updated} | ❌ ошибок 0 | ⚠️ пропущено дубликатов {skipped}")
+                    
+                    # Показываем сколько всего студентов в базе сейчас
+                    total_in_db = Student.objects.count()
+                    messages.info(request, f"📊 Всего студентов в базе после импорта: {total_in_db}")
 
                     return render(request, "admin/students/import_excel.html", {"form": ExcelImportForm()})
 
